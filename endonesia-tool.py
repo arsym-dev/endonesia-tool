@@ -66,7 +66,6 @@ font_pack_parser.add_argument(
 
 args = parser.parse_args()
 
-print(vars(args))
 
 if args.cmd == 'font-unpack':
     from font import unpack

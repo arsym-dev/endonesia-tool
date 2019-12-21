@@ -27,9 +27,7 @@ def write_file(data, width, height, bitdepth, output):
     bmp.write(struct.pack('<I', 0x10))
     bmp.write(struct.pack('I', 0x0))
 
-    print(datasize, math.pow(2, bitdepth))
-
-    for piece in read_in_chunks(data, 4, datasize + math.pow(2, bitdepth) * 4):
+    for piece in read_in_chunks(data, size = datasize + math.pow(2, bitdepth) * 4):
         bmp.write(piece)
 
     bmp.close()
