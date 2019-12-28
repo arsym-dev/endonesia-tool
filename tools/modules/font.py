@@ -4,11 +4,11 @@ import struct
 import os
 import sys
 import json
+import tbl
 from bmp import write_file
 from utils import read_in_chunks
 from utils import check_bin
 from utils import tooldir
-from jis208 import convertToIndex
 
 OFFSET = 0xD890
 WIDTH = 2256
@@ -113,13 +113,16 @@ def pack(input, output, variable_width = False):
             print(e, file = sys.stderr)
             return 2
 
+        table = tbl.TBL(tbl.TBL.PACK)
+
         widths_table = json.load(widths_file)
 
         widths_data = [0x18] * TABLE_SIZE
 
         for char in widths_table:
-            index = convertToIndex(char)
-            widths_data[index] = widths_table[char]
+            index = table.pos(char)
+            if index >= 0:
+                widths_data[index] = widths_table[char]
 
         elf.seek(WIDTH_TABLE)
 
