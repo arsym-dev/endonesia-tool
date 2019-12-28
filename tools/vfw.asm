@@ -62,7 +62,7 @@ lbu t1, (t0)
 bnez t1, @@hasWidth
 nop
 dmove t1, zero
-li t1, 0xd
+li t1, 0x18
 @@hasWidth:
 li t2, 0x2
 dmove t6, t1
@@ -182,7 +182,7 @@ lbu t0, (t1)
 bnez t0, @@hasWidth
 nop
 dmove t0, zero
-li t0, 0xd
+li t0, 0x18
 @@hasWidth:
 add a0, t0
 addiu a1, 0x1
