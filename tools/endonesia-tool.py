@@ -2,8 +2,15 @@
 
 import sys
 import argparse
+import os
+import inspect
 
-sys.path.insert(1, 'modules')
+filename = inspect.getframeinfo(inspect.currentframe()).filename
+path = os.path.dirname(os.path.abspath(filename))
+
+print(path)
+
+sys.path.insert(1, os.path.join(path, 'modules'))
 
 class EndonesiaParser(argparse.ArgumentParser):
     def error(self, message):
