@@ -1,8 +1,46 @@
-.open "pbpx_952.01",0x1640000
+.open "pbpx_952.01",0x163f000
 .ps2
-.orga 0x33d070
+
+.org 0x17c97b8
+@fontToRAM:
+
+.org 0x17c98bc
+@fontFromRAM:
+
+.org 0x17ad7a8
+@copyMenuFont:
+
+.org 0x17ad84c
+@renderMenuFonts:
+
+.org 0x17c9928
+@renderScreenFonts:
+
+.org 0x17ade18
+@menuFontStart:
+
+.org 0x17ad8f0
+@lampFontStart:
+
+.org 0x17add68
+@menuFontLoop:
+
+.org 0x17ad730
+@startMenuFontRender:
+
+.org 0x197c4d0
+@tableWidthOffset:
+
+.org 0x197c060
+@cache:
+
+.org 0x197c06c
+@oddBit:
+
+.org 0x197c070
 
 ;obtain the correct font width
+calculateFontWidth:
 addiu s0, -0x2
 lbu t2, (s0)
 addiu s0, 0x1
@@ -14,16 +52,18 @@ mult t2, t2, t6
 add t1, t2, t1
 li t6, 0x11a
 slt t2, t1, t6
-bnez t2, 0x197d0a8
+bnez t2, @@characterInRange
 nop
 li t1, 0x0
-li t0, 0x197c3a0 ;width table index
+@@characterInRange:
+li t0, @tableWidthOffset
 add t0, t1
 lbu t1, (t0)
-bnez t1, 0x197d0c8
+bnez t1, @@hasWidth
 nop
 dmove t1, zero
 li t1, 0xd
+@@hasWidth:
 li t2, 0x2
 dmove t6, t1
 div t1, t2
@@ -32,7 +72,7 @@ mfhi t0
 add t7, t1, t0
 add s1, t7
 addiu s0, 0x1
-li t2, 0x197c06c
+li t2, @oddBit
 lh t1, (t2)
 xor t1, t1, t0
 sh t1, 0x2(t2)
@@ -43,14 +83,15 @@ jr ra
 nop
 
 ;render font widths
+setDialogFontWidth:
 dmove t5, zero
-li t5, 0x197c060
+li t5, @cache
 sd ra, (t5)
 dmove v1, s1
 dmove a1, s0
 lw s0, 0x8(t5)
 dmove s1, zero
-jal 0x197c070
+jal calculateFontWidth
 nop
 dmove t0, zero
 dmove t1, zero
@@ -64,14 +105,12 @@ jr ra
 nop
 
 ;render correct offsets for normal dialog
+setScreenTextOffsets:
 dmove t5, zero
-li t5, 0x0197c060
+li t5, @cache
 sd ra, (t5)
-dmove t7, s0
-lw s0, 0x8(t5)
-jal 0x197c070
+jal updateOddBit
 nop
-dmove s0, t7
 add v0, s1
 ld ra, (t5)
 sw v0, 0x40(s0)
@@ -79,22 +118,24 @@ jr ra
 nop
 
 ;render correct widths for normal dialog
+setDialogOffsets:
 dmove t5, zero
-li t5, 0x0197c068
+li t5, @cache
 lw t7, 0x38(s0)
 nop
-sw t7, (t5)
+sw t7, 0x8(t5)
 dmove t7, ra
-jal 0x17c97b8
+jal @fontToRAM
 dmove ra, t7
 jr ra
 nop
 
 ;save correct address for widths
+cacheWidthAddresses:
 lbu v1, (s0)
 addiu s0, 0x1
-li t5, 0x0197c068
-sw s0, (t5)
+li t5, @cache
+sw s0, 0x8(t5)
 addiu s0, -0x1
 jr ra
 nop
@@ -104,18 +145,20 @@ nop
 ;a0 = final width of entire text on the current line
 ;0x38(s0) =  start of the text to be considered
 ;do not count a1a1 or 20; the game doesn't, so we don't either
+centerDialogText:
 lw t5, 0x38(s0)
 addiu t5, -0x1
 li t7, 0x20
 dmove a0, zero
 dmove a1, zero
-beq a1, v0, 0x197d284 ;loop here
+@@loopstart:
+beq a1, v0, @@loopend
 nop
 addiu t5, 0x1
 lbu t2, (t5)
 addiu t5, 0x1
 lbu t1, (t5)
-beql t2, t7, 0x197d1f8 ;go back to the top
+beql t2, t7, @@loopstart
 nop
 addiu t6, t2, -0xa1
 li t0, 0x5e
@@ -125,49 +168,70 @@ add t0, t6
 sll t2, t2, 0x08
 or t1, t1, t2
 li t7, 0xa1a1
-beql t1, t7, 0x197d1f8 ; go back to the top
+beql t1, t7, @@loopstart
 addiu a1, 0x1
 li t6, 0x11a
 slt t2, t0, t6
-bnez t2, 0x197d254
+bnez t2, @@characterInRange
 nop
 li t0, 0x0
-li t1, 0x197c3a0 ;width table index
+@@characterInRange:
+li t1, @tableWidthOffset
 add t1, t0
 lbu t0, (t1)
-bnez t0, 0x197d274
+bnez t0, @@hasWidth
 nop
 dmove t0, zero
 li t0, 0xd
+@@hasWidth:
 add a0, t0
 addiu a1, 0x1
-bne a1, v0, 0x197d1f8 ;go back to the top
+bne a1, v0, @@loopstart
 nop
+@@loopend:
 li t0, 0x2
 div a0, t0
+mflo a1
+mfhi t2
+add a1, t2
+div a1, t0
 mflo v1
 jr ra
 nop
 
-;get correct widths for menu text
-addiu t0, a1, -0xa1
-addiu t1, a0, -0xa1
+;set correct widths for menu text
+setMenuTextWidth:
+addiu t0, v0, -0xa1
+andi t1, a1, 0xff
+addiu t1, -0xa1
 li t6, 0x5e
 mult t0, t0, t6
 add t1, t0, t1
 li t6, 0x11a
 slt t2, t1, t6
-bnez t2, 0x197d2c0
+bnez t2, @@characterInRange
 nop
 li t1, 0x0
-li t0, 0x197c3a0 ;width table index
+@@characterInRange:
+li t0, @tableWidthOffset
 add t0, t1
 lbu t7, (t0)
-andi a1, v0, 0xffff
-jr ra
+dmove t6, t7
+li t2, 0x2
+div t6, t2
+mflo t1
+mfhi t0
+add t7, t1, t0
+li t2, @oddBit
+lh t1, (t2)
+xor t1, t1, t0
+sh t1, 0x2(t2)
+li v1, 0xd380
+j @startMenuFontRender
 nop
 
 ;get correct line width for centering menu text
+calculateLineWidth:
 addiu t0, v1, -0xa1
 addiu t7, v0, -0xa1
 li t6, 0x5e
@@ -175,54 +239,133 @@ mult t0, t0, t6
 add t7, t0, t7
 li t6, 0x11a
 slt t0, t7, t6
-bnez t0, 0x197d304
+bnez t0, @@characterInRange
 nop
 li t7, 0x0
-li t0, 0x197c310
+@@characterInRange:
+li t0, @tableWidthOffset
 add t0, t7
 lbu t7, (t0)
-li t0, 0x2
-mult t7, t7, t0
 add a3, t7
-j 0x17ad84c
+j @renderMenuFonts
+nop
+
+resetOddBit:
+lw a3, 0x38(s0)
+lbu v1, (a3)
+beqz v1, @@reset
+nop
+li t0, 0xa
+bne v1, t0, @@noReset
+nop
+@@reset:
+li t0, @oddBit
+sh zero, (t0)
+@@noReset:
+jr ra
+nop
+
+cleanupOddBit:
+li a0, @oddBit
+sh zero, (a0)
+lw a0, 0x48(s0)
+jr ra
+nop
+
+resetMenuOddBit:
+li v0, @oddBit
+sh zero, (v0)
+addiu v0, a2, 0x1
+li v1, 0x20
+jr ra
+nop
+
+resetScreenOddBit:
+li t2, @oddBit
+sh zero, (t2)
+j @renderScreenFonts
+nop
+
+;update even/odd widths for menus
+updateMenuOddBit:
+add v0, t7
+li t0, @oddBit
+lh t3, (t0)
+lh t1, 0x2(t0)
+sh t1, (t0)
+li t0, 0x2
+div t6, t0
+mfhi t0
+and t0, t3
+sub v0, t0
+j @menuFontLoop
 nop
 
 ;update even/odd widths
+updateOddBit:
 add s1, t7
-li t2, 0x197c06c
+li t2, @oddBit
+lh t3, (t2)
 lh t1, 0x2(t2)
 sh t1, (t2)
 li t2, 0x2
 div t6, t2
 mfhi t2
-and t2, t1
+and t2, t3
 sub s1, t2
 jr ra
 nop
 
 ;handle even/odd widths
-li t3, 0x197c06c
+handleOddWidths:
+li t3, @oddBit
+nop
 lh s3, (t3)
-beqz s3, 0x197d38c
+nop
+beqz s3, @@saveByte
 lbu s3, -0x1(a2)
+nop
 sll s3, 0x04
 srl s3, 0x04
-srl t3, a0, 0x04
-sll t3, 0x04
+sll t3, a0, 0x04
 or s3, t3
 sb s3, -0x1(a2)
-sll a0, 0x04
 srl a0, 0x04
+@@saveByte:
 sb a0, (a2)
 li t3, -0x10
-j 0x17c98bc
+j @fontFromRAM
+nop
+
+handleOddMenuWidths:
+li t4, @oddBit
+nop
+lh v1, (t4)
+nop
+beqz v1, @@evenByte
+lbu v1, -0x1(a2)
+nop
+sll v1, 0x04
+srl v1, 0x04
+andi v0, 0xff
+sll t4, v0, 0x04
+or v1, t4
+sb v1, -0x1(a2)
+srl a0, v0, 0x04
+b @@finish
+nop
+@@evenByte:
+dmove a0, v0
+@@finish:
+li t4, -0x10
+j @copyMenuFont
 nop
 
 ;offsets for save screens
 
 .orga 0x18a978
 
-jal 0x197c328
+jal updateOddBit
 lbu v0, (s0)
 add s2, t6
 
@@ -230,7 +373,7 @@ add s2, t6
 
 .orga 0x18a808
 
-jal 0x197c110
+jal setDialogFontWidth
 
 .orga 0x18a838
 
@@ -244,42 +387,42 @@ slt v1, a3, t7
 
 .orga 0x5554
 
-jal 0x197c160
+jal setScreenTextOffsets
 
 ;widths for some dialogs
 
 .orga 0x553c
 
-jal 0x197c198
+jal setDialogOffsets
 
 ;offsets and widths for some dialogs
 
 .orga 0x56c4
 
-jal 0x197c198
+jal setDialogOffsets
 
 ;widths for dialogs
 
 .orga 0x18a940
 
-jal 0x197c1c4
+jal cacheWidthAddresses
 
 ;centering for dialogs
 
 .orga 0x5458
 
-jal 0x197c1e4
+jal centerDialogText
 nop
 
 ;link menu text widths and offsets with vfr functions
 
-.orga 0x16ed30
+.org 0x17ad72c
 
-jal 0x197c298
+j setMenuTextWidth
 
 .orga 0x16ed64
 
-add v0,t7
+j updateMenuOddBit
 
 .orga 0x16e790
 
@@ -289,7 +432,7 @@ slt a1, a3, t7
 
 .orga 0x16e848
 
-j 0x197c2dc
+j calculateLineWidth
 
 .orga 0x170d98
 
@@ -310,5 +453,34 @@ nop
 .orga 0x1773c4
 
 nop
+
+.orga 0x18a8b4
+
+;odd numbered widths
+
+nop
+j handleOddWidths
+
+.org 0x17adbb8
+
+jal cleanupOddBit
+
+.org 0x17ad7a4
+
+j handleOddMenuWidths
+
+.org 0x164440c
+
+jal resetOddBit
+nop
+
+.org 0x17adcec
+
+jal resetMenuOddBit
+nop
+
+.org 0x17c9924
+
+j resetScreenOddBit
 
 .Close
