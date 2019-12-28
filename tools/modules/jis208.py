@@ -17,12 +17,17 @@ def convertToString(index):
         return '\\n'
     return char((lead - TABLE_OFFSET) * 94 + (bite - TABLE_OFFSET)) if index >= 0xA1A1 else '[' + str(index) + ']'
 
-def convertToHex(string):
+def convertToIndex(string):
     index = ord(string)
     if index in table:
-        char = table.index(index)
-        lead = math.floor(char / 94) + TABLE_OFFSET;
-        bite = char % 94 + TABLE_OFFSET;
+        return table.index(index)
+    return -1
+
+def convertToHex(string):
+    index = convertToIndex(string)
+    if index >= 0:
+        lead = math.floor(index / 94) + TABLE_OFFSET;
+        bite = index % 94 + TABLE_OFFSET;
         return (lead << 8) + bite
     return ''
 

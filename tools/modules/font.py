@@ -3,13 +3,19 @@ import tempfile
 import struct
 import os
 import sys
+import json
 from bmp import write_file
 from utils import read_in_chunks
+from utils import check_bin
+from utils import tooldir
+from jis208 import convertToIndex
 
 OFFSET = 0xD890
 WIDTH = 2256
 HEIGHT = 1128
 BITDEPTH = 4
+WIDTH_TABLE = 0x33D4D0
+TABLE_SIZE = 0x11A
 
 def unpack(input, output):
     if len(input) <= 0:
@@ -27,7 +33,7 @@ def unpack(input, output):
 
     subprocess.run(['convert', '-flip', output, output])
 
-def pack(input, output):
+def pack(input, output, variable_width = False):
     font = tempfile.NamedTemporaryFile(delete = False)
     font.close()
     try:
@@ -99,3 +105,34 @@ def pack(input, output):
         right = pixel % 0x10
         newpixel = (indexed[left] << 4) + indexed[right]
         elf.write(struct.pack('B', newpixel))
+
+    if variable_width:
+        try:
+            widths_file = open(variable_width, 'r')
+        except IOError as e:
+            print(e, file = sys.stderr)
+            return 2
+
+        widths_table = json.load(widths_file)
+
+        widths_data = [0x18] * TABLE_SIZE
+
+        for char in widths_table:
+            index = convertToIndex(char)
+            widths_data[index] = widths_table[char]
+
+        elf.seek(WIDTH_TABLE)
+
+        for i in range(0, TABLE_SIZE):
+            elf.write(struct.pack('B', widths_data[i]))
+
+        if not check_bin('armips'):
+            print('Font successfully packed, but variable font widths are not installed because armips is not in your path.')
+            return 2
+
+        try:
+            vfwpath = os.path.join(tooldir, 'vfw.asm')
+            subprocess.check_call(['armips', vfwpath, '-root', output])
+        except subprocess.CalledProcessError:
+            print('armips failed to replace variable font width code.')
+            return 2
