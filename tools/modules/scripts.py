@@ -8,7 +8,7 @@ from utils import read_in_chunks, csv_find
 
 ELF_ENUM = 'ELF'
 EXO_ENUM = 'EXO'
-RESERVED = 0x33D070
+RESERVED = 0x33D600
 EXO_POINTERS = 0x2C8270
 ELF_POINTERS = [
     {'pointer': 0x3094C0

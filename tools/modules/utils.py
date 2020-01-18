@@ -1,3 +1,7 @@
+from shutil import which
+import inspect
+import os
+
 def read_in_chunks(file_object, chunk_size = 4, size = 0):
     currentsize = 0
     while True:
@@ -13,3 +17,8 @@ def csv_find(pointer, csv, text = False):
         if pointer == int(csv[row][0]) and (not text or text == int(csv[row][1])):
             return row
     return -1
+
+def check_bin(name):
+    return which(name) is not None
+
+tooldir = ''

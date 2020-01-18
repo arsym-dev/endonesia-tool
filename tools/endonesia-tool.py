@@ -2,8 +2,16 @@
 
 import sys
 import argparse
+import os
+import inspect
 
-sys.path.insert(1, 'modules')
+filename = inspect.getframeinfo(inspect.currentframe()).filename
+tooldir = os.path.dirname(os.path.abspath(filename))
+
+sys.path.insert(1, os.path.join(tooldir, 'modules'))
+
+import utils
+utils.tooldir = tooldir
 
 class EndonesiaParser(argparse.ArgumentParser):
     def error(self, message):
@@ -62,6 +70,15 @@ font_pack_parser.add_argument(
         , action = 'store'
         , metavar = '[ELF file]'
         , help = 'ELF file to pack. Normally called "pbpx_952.01".'
+        )
+
+font_pack_parser.add_argument(
+        '-v'
+        , '--variable-width'
+        , required = False
+        , action = 'store'
+        , metavar = '[VFW table]'
+        , help = 'JSON file used for variable font widths. Requires armips. Variable font width hacks will not be included without this table.'
         )
 
 script_unpack_parser = subparser.add_parser('script-unpack'
@@ -133,6 +150,8 @@ script_pack_parser.add_argument(
         , help = 'CSV file to pack scripts from.'
         )
 
+
+
 args = parser.parse_args()
 
 if args.cmd == 'font-unpack':
@@ -140,7 +159,7 @@ if args.cmd == 'font-unpack':
     unpack(args.input, args.output)
 elif args.cmd == 'font-pack':
     from font import pack
-    pack(args.input, args.output)
+    pack(args.input, args.output, args.variable_width)
 elif args.cmd == 'script-unpack':
     from scripts import unpack
     unpack(args.elf_file, args.exo_bin, args.output, args.overwrite_csv)
