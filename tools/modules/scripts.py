@@ -6,21 +6,36 @@ import sys
 import jis208
 from utils import read_in_chunks, csv_find
 
+CSV_DELIMETER = '|'
+CSV_ESCAPECHAR = '\\'
+CSV_LINETERMINATOR = '\n'
+
 ELF_ENUM = 'ELF'
 EXO_ENUM = 'EXO'
 RESERVED = 0x33D600
 EXO_POINTERS = 0x2C8270
 ELF_POINTERS = [
-    {'pointer': 0x3094C0
-        , 'size': 2928}
-    , {'pointer': 0x310780
-        , 'size': 752}
-    , {'pointer': 0x313310
-        , 'size': 1000}
-    , {'pointer': 0x3497B8
-        , 'size': 12}
-    , {'pointer': 0x330AD0
-        , 'size': 760}]
+    {
+        'pointer': 0x3094C0,
+        'size': 2928
+    },
+    {
+        'pointer': 0x310780,
+        'size': 752
+    },
+    {
+        'pointer': 0x313310,
+        'size': 1000
+    },
+    {
+        'pointer': 0x3497B8,
+        'size': 12
+    },
+    {
+        'pointer': 0x330AD0,
+        'size': 760
+    }
+    ]
 ELF_OFFSET = -0x163F000
 
 EXO_STRIDE = 0x800
@@ -93,6 +108,12 @@ def parse_special_char(string, index):
         return {'address': jis208.LINEBREAK, 'length': 2, 'offset': -1, 'bit_size': 1, 'format': 'B'}
     return False
 
+def dec2hex(num):
+    return "{:08x}".format(num)
+
+def hex2dec(num):
+    return hex(num, 16)
+
 def unpack(elf, exo, output, overwrite = False):
     try:
         elf_file = open(elf, 'rb')
@@ -109,15 +130,16 @@ def unpack(elf, exo, output, overwrite = False):
     csvexists = False
     try:
         if os.path.exists(output):
-            csvfile = open(output, 'r')
-            reader = csv.reader(x.replace('\0', '') for x in csvfile)
+            csvfile = open(output, 'r', encoding='utf-8')
+            csv_data = csvfile.read().replace('\0', '').split('\n')
+            reader = csv.reader(csv_data, delimiter=CSV_DELIMETER, escapechar=CSV_ESCAPECHAR, lineterminator=CSV_LINETERMINATOR)
             csvref = [r for r in reader]
             csvfile.close()
             csvexists = True
         else:
             overwite = True
-        output_file = open(output, 'w')
-        writer = csv.writer(output_file)
+        output_file = open(output, 'w', encoding='utf-8')
+        writer = csv.writer(output_file, delimiter=CSV_DELIMETER, escapechar=CSV_ESCAPECHAR, lineterminator=CSV_LINETERMINATOR)
     except IOError as e:
         print(e, file = sys.stderr)
         return 2
@@ -131,9 +153,9 @@ def unpack(elf, exo, output, overwrite = False):
         currentsize = 0
         while currentsize < i['size']:
             elf_file.seek(currentpos)
-            row = [currentpos]
+            row = [dec2hex(currentpos)]
             pointer = struct.unpack('<I', elf_file.read(4))[0] + ELF_OFFSET
-            row.append(pointer)
+            row.append(dec2hex(pointer))
             row.append(ELF_ENUM)
             csvindex = csv_find(pointer = currentpos, csv = csvref) if csvexists else -1
             currentpos = elf_file.tell()
@@ -160,7 +182,7 @@ def unpack(elf, exo, output, overwrite = False):
                     row.append(' ')
                     writer.writerow(row)
 
-    #Extract exo.bin texts
+    # Extract EXO.bin texts
     elf_file.seek(EXO_POINTERS)
 
     while True:
@@ -183,7 +205,7 @@ def unpack(elf, exo, output, overwrite = False):
             textpointer = struct.unpack('<I', exo_file.read(4))[0]
             exo_file.seek(pointer + textpointer)
             char = struct.unpack('>H', exo_file.read(2))[0]
-            row = [elfpointer, currentpos - pointer, EXO_ENUM]
+            row = [dec2hex(elfpointer), dec2hex(currentpos - pointer), EXO_ENUM]
             csvindex = csv_find(pointer = elfpointer, text = currentpos - pointer, csv = csvref) if csvexists else -1
 
             currentpos += 4
@@ -210,7 +232,7 @@ def unpack(elf, exo, output, overwrite = False):
 
 def pack(input, elf, exo):
     try:
-        csvfile = open(input, 'r')
+        csvfile = open(input, 'r', encoding='utf-8')
     except IOError as e:
         print(e, file = sys.stderr)
         return 2
@@ -227,7 +249,10 @@ def pack(input, elf, exo):
         print(e, file = sys.stderr)
         return 2
 
-    csvref = csv.reader(x.replace('\0', '') for x in csvfile)
+    csv_data = csvfile.read().replace('\0', '').split('\n')
+    reader = csv.reader(csv_data, delimiter=CSV_DELIMETER, escapechar=CSV_ESCAPECHAR, lineterminator=CSV_LINETERMINATOR)
+    csvref = [r for r in reader]
+
 
     #Prepare for packing
     exodata = []
@@ -263,14 +288,14 @@ def pack(input, elf, exo):
         text = row[3] if not row[4] or row[4] == ' ' else row[4]
         required_size = hex_length(text)
         if row[2] == ELF_ENUM:
-            elf_file.seek(int(row[1]))
+            elf_file.seek(int(row[1], 16))
             available_size = string_size(elf_file)
             if required_size > available_size:
                 elf_file.seek(reserved_pointer)
                 if not is_empty(elf_file, required_size):
                     print('Not enough reserved space left in the ELF file.')
                     return 2
-                elf_file.seek(int(row[0]))
+                elf_file.seek(int(row[0], 16))
                 elf_file.write(struct.pack('<I', reserved_pointer))
                 elf_file.seek(reserved_pointer)
                 reserved_pointer += required_size + 2
@@ -290,7 +315,7 @@ def pack(input, elf, exo):
                     i += 1
                 elf_file.write(struct.pack(pack_format, hex_value))
         elif row[2] == EXO_ENUM:
-            elf_file.seek(int(row[0]))
+            elf_file.seek(int(row[0], 16))
             pointer = struct.unpack('<I', elf_file.read(4))[0]
             pointer_index = exo_pointers.index(pointer)
 
@@ -303,10 +328,10 @@ def pack(input, elf, exo):
             exo_newbuffer.seek(0)
             length = struct.unpack('<I', exo_newbuffer.read(4))[0]
             content_length = struct.unpack('<I', exo_newbuffer.read(4))[0]
-            exo_newbuffer.seek(int(row[1]))
+            exo_newbuffer.seek(int(row[1], 16))
             textpos = struct.unpack('<I', exo_newbuffer.read(4))[0]
             exo_newbuffer.seek(textpos)
-            print(hex(textpos), length, content_length, row[1], row[0], hex(int(row[1])), hex(int(row[0])))
+            print(f"{hex(textpos)}\t{length}\t{content_length}\t0x{row[1]}\t0x{row[0]}, {int(row[1], 16)}, {int(row[0], 16)}")
             available_size = string_size(exo_newbuffer)
             if available_size < required_size:
                 sizediff = required_size - available_size + (-required_size % 0x8)

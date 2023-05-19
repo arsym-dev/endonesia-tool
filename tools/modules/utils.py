@@ -14,7 +14,7 @@ def read_in_chunks(file_object, chunk_size = 4, size = 0):
 def csv_find(pointer, csv, text = False):
     size = len(csv)
     for row in range(0, size):
-        if pointer == int(csv[row][0]) and (not text or text == int(csv[row][1])):
+        if pointer == int(csv[row][0], 16) and (not text or text == int(csv[row][1], 16)):
             return row
     return -1
 
