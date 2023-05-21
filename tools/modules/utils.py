@@ -1,6 +1,6 @@
 from shutil import which
-import inspect
-import os
+
+tooldir = ''
 
 def read_in_chunks(file_object, chunk_size = 4, size = 0):
     currentsize = 0
@@ -21,4 +21,7 @@ def csv_find(pointer, csv, text = False):
 def check_bin(name):
     return which(name) is not None
 
-tooldir = ''
+def pad_to_nearest(input, k=16):
+    ## Add enough zeros to pad it to the nearest multiple of k
+    num_zeros = k - (len(input) % k) % k
+    return input + bytes(num_zeros)

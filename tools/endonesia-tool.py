@@ -154,18 +154,19 @@ script_pack_parser.add_argument(
 
 args = parser.parse_args()
 
+import font as endofont
+import scripts as endoscripts
+
 if args.cmd == 'font-unpack':
-    from font import unpack
-    unpack(args.input, args.output)
+    endofont.unpack(args.input, args.output)
 elif args.cmd == 'font-pack':
-    from font import pack
-    pack(args.input, args.output, args.variable_width)
+    endofont.pack(args.input, args.output, args.variable_width)
 elif args.cmd == 'script-unpack':
-    from scripts import unpack
-    unpack(args.elf_file, args.exo_bin, args.output, args.overwrite_csv)
+    endoscripts.unpack(args.elf_file, args.exo_bin, args.output, args.overwrite_csv)
 elif args.cmd == 'script-pack':
-    from scripts import pack
-    pack(args.input, args.elf_file, args.exo_bin)
+    # endoscripts.pack(args.input, args.elf_file, args.exo_bin)
+#     endoscripts.pack2(args.input, args.elf_file, args.exo_bin)
+    endoscripts.calculateFreeSpace(args.elf_file, args.exo_bin)
 
 if len(sys.argv)==1:
     parser.print_help(sys.stderr)
