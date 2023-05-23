@@ -1,6 +1,6 @@
 import struct
 import math
-from utils import read_in_chunks
+from endotool.utils import read_in_chunks
 
 HEADERSIZE = 0x76
 

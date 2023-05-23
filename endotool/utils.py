@@ -23,5 +23,5 @@ def check_bin(name):
 
 def pad_to_nearest(input, k=16):
     ## Add enough zeros to pad it to the nearest multiple of k
-    num_zeros = k - (len(input) % k) % k
+    num_zeros = (k - (len(input) % k)) % k
     return input + bytes(num_zeros)

@@ -129,6 +129,66 @@ def stringToHex(string, transform_ascii=False):
     size = len(string)
     i = 0
     while i < size:
+        ## Process things of the form {00} or {0000}
+        if string[i] == SPECIAL_CHAR_START:
+            for x in [2, 4]:
+                if string[i+x+1] != SPECIAL_CHAR_END:
+                    continue
+
+                if x == 2:
+                    format = "B"
+                else:
+                    format = ">H"
+
+                rv += struct.pack(format, int(string[i+1:i+x+1], 16))
+                i += x + 2
+                break
+            continue
+        
+        ## Process new lines
+        elif string[i:i+2] == "\\n":
+            rv += struct.pack("B", LINEBREAK)
+            i += 2
+            continue
+        
+        ## Process ASCII characters
+        char = string[i]
+        i += 1
+
+        if transform_ascii:
+            if char>='0' and char<='9':
+                rv += bytearray([0xa3, 0xB0+int(char)])
+                continue
+
+            if char>='A' and char<='Z':
+                rv += bytearray([0xa3, 0xC1+ord(char)-ord('A')])
+                continue
+
+            if char>='a' and char<='z':
+                rv += bytearray([0xa3, 0xE1+ord(char)-ord('a')])
+                continue
+
+            if char in ascii2eucjptbl:
+                rv += ascii2eucjptbl[char]
+                continue
+        
+        ## Process ASCII characters as-is
+        if ord(char) <= 0x7F:
+            rv += struct.pack("B", ord(char))
+            continue
+        
+        ## Process japanese characters
+        rv += struct.pack(">H", convertToHex(char))
+    
+    return rv
+    # return rv.decode("eucjp") #jis208
+
+def stringToHex2(string, transform_ascii=False):
+    rv = b""
+
+    size = len(string)
+    i = 0
+    while i < size:
         char = string[i]
         parse = parse_special_char(string, i)
         if parse:
@@ -137,6 +197,10 @@ def stringToHex(string, transform_ascii=False):
             continue
         
         i += 1
+
+        ## Convert ascii characters to their EUC_JP equivalent
+        ## The game does not properly handle one-byte characters
+        ## hence the need for this hack
         if transform_ascii:
             if char>='0' and char<='9':
                 rv += bytearray([0xa3, 0xB0+int(char)])
@@ -158,12 +222,6 @@ def stringToHex(string, transform_ascii=False):
     
     return rv
     # return rv.decode("eucjp") #jis208
-
-def isSpecialStart(string):
-    return string == SPECIAL_CHAR_START
-
-def isSpecialEnd(string):
-    return string == SPECIAL_CHAR_END
 
 def validate(index):
     lead = index >> 8

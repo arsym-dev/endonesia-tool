@@ -1,7 +1,7 @@
 import math
 import sys
-from utils import tooldir
 import os
+from endotool.utils import tooldir
 
 TABLE_OFFSET = 0xA1
 

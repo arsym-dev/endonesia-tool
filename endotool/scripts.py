@@ -5,10 +5,11 @@ import io
 import csv
 import sys
 import shutil
-import jis208
 import math
-from utils import read_in_chunks, csv_find, pad_to_nearest
-from file_structures import *
+
+from endotool import jis208
+from endotool.utils import read_in_chunks, csv_find, pad_to_nearest
+from endotool.file_structures import *
 
 CSV_DELIMETER = '|'
 CSV_ESCAPECHAR = '\\'
@@ -217,14 +218,19 @@ def unpack(elf, exo, output, overwrite = False):
 
     ## Write output
     for exoblock in blocks:
-        for s in exoblock.text_entries:
+        for entry in exoblock.text_entries:
+
+            # Only print non-duplicated blocks
+            if entry.is_duplicate:
+                continue
+
             row = [
                 EXO_ENUM, # FILE
                 dec2hex(exoblock.elf_address), # ELF Pointer
                 dec2hex(exoblock.exo_address), # EXO Block
-                dec2hex(exoblock.exo_address + s.offset), # Text addr
-                s.item_num, # Item num
-                s.text, # JP Text
+                dec2hex(exoblock.exo_address + entry.offset), # Text addr
+                entry.item_num, # Item num
+                entry.text, # JP Text
                 '',# EN Text
             ]
 
@@ -480,34 +486,42 @@ def pack2(input, elf, exo):
     csv_data = [r for r in reader]
     csvfile.close()
 
-    #######
-    ## Load up the blocks from the original file and save them as-is, but more compressed
-    #######
-    blocks = getExoBlocks(elf_file, exo_file)
-    curr_exo_address = blocks[0].exo_address
+    # #######
+    # ## Load up the blocks from the original file and save them as-is, but more compressed
+    # #######
+    # blocks = getExoBlocks(elf_file, exo_file)
+    # curr_exo_address = blocks[0].exo_address
 
-    for block in blocks:
-        bin_data = block.toBinary()
+    # for block in blocks:
+    #     bin_data = block.toBinary()
 
-        ## Adjust the ELF file
-        elf_file.seek(block.elf_address)
-        elf_file.write(struct.pack("<I", block.exo_size))
-        elf_file.write(struct.pack("<I", 0))
-        elf_file.write(struct.pack("<I", curr_exo_address))
-        elf_file.write(struct.pack("<I", 0))
+    #     # for i, b in enumerate(bin_data):
+    #     #     if i % 16 == 0:
+    #     #         print("\n", end="")
+    #     #     if i % 4 == 0:
+    #     #         print("  ", end="")
+            
+    #     #     print(f"{b:02x} ", end="")
+    #     # pass
 
-        ## Write the EXO block
-        exo_file.seek(curr_exo_address)
-        exo_file.write(bin_data)
+    #     ## Adjust the ELF file
+    #     elf_file.seek(block.elf_address)
+    #     elf_file.write(struct.pack("<I", block.exo_size))
+    #     elf_file.write(struct.pack("<I", 0))
+    #     elf_file.write(struct.pack("<I", curr_exo_address))
+    #     elf_file.write(struct.pack("<I", 0))
 
-        curr_exo_address += block.exo_size
+    #     ## Write the EXO block
+    #     exo_file.seek(curr_exo_address)
+    #     exo_file.write(bin_data)
+
+    #     curr_exo_address += len(pad_to_nearest(bin_data, k=1024))
     
-    elf_file.close()
-    exo_file.close()
+    # elf_file.close()
+    # exo_file.close()
 
 
-    return
-
+    ## Pre-process the CSV data
     elf_rows = []
     exo_rows = {}
     for row in csv_data:
@@ -553,60 +567,82 @@ def pack2(input, elf, exo):
     #         elf_file.write(struct.pack(pack_format, hex_value))
     
 
-    ## Process EXO rows
+    #######
+    ## Load up the blocks from the original file and save them as-is, but more compressed
+    #######
+    blocks = getExoBlocks(elf_file, exo_file)
+
+    ## Process EXO rows nd add translated text to them
     for elf_pointer, rows in exo_rows.items():
         strings = []
         for row in rows:
-            elf_pointer = row[1]
-            exo_block = row[2]
-            text_address = row[3]
-            item_num = row[4]
+            elf_pointer = int(row[1], 16)
+            exo_block = int(row[2], 16)
+            text_address = int(row[3], 16)
+            item_num = int(row[4])
             text_jp = row[5].strip()
             text_en = row[6].strip()
 
-            entry = ExoScriptTextEntry()
-            entry.item_num = item_num
-            entry.offset = text_address
+            found_block : ExoScriptBlock = None
+            for block in blocks:
+                if elf_pointer == block.elf_address:
+                    found_block = block
+                    break
+            if found_block is None:
+                raise Exception("Block not found")
+            
+
+            found_entry : ExoScriptTextEntry = None
+            for entry in block.text_entries:
+                if entry.item_num == item_num:
+                    found_entry = entry
+                    break
+            if found_entry is None:
+                raise Exception("Entry not found")
+
+
+            # entry = ExoScriptTextEntry()
+            # entry.item_num = item_num
+            # entry.offset = text_address
 
             if text_en != '':
-                entry.text = text_en
-                entry.transform_ascii = True
+                found_entry.text = text_en
+                found_entry.transform_ascii = True
             else:
-                entry.text = text_jp
-                entry.transform_ascii = False
-            
-            strings.append(entry)
+                found_entry.text = text_jp
+                found_entry.transform_ascii = False
         
-        ## Create the final hex block
-        exoblock = ExoScriptBlock(strings)
-        exoblock.transform_ascii = True
-        rv = exoblock.toBinary()
-        rv = pad_to_nearest(rv, k=2048)
-
-        # b = ExoScriptBlock(["I hope you don't mind monospaced fonts"])
-        # rv = b.pack()
-
-        for i, b in enumerate(rv):
-            if i % 16 == 0:
-                print("\n", end="")
-            if i % 4 == 0:
-                print("  ", end="")
-            
-            print(f"{b:02x} ", end="")
-        pass
-
-        # ## Insert at the bottom of the EXO file
-        # exo_file.seek(0, os.SEEK_END)
-        # exo_pointer = exo_file.tell()
-        # exo_file.write(rv)
     
-        # ## Rewrite the ELF pointer to point to this new EXO address
-        # elf_file.seek(elf_pointer, os.SEEK_SET)
-        # elf_file.write(struct.pack("<I", exo_pointer))
+    ## Create the final hex blocks
+    curr_exo_address = blocks[0].exo_address
 
+    for block in blocks:
+        bin_data = block.toBinary()
 
-    exo_file.close()
+        # for i, b in enumerate(bin_data):
+        #     if i % 16 == 0:
+        #         print("\n", end="")
+        #     if i % 4 == 0:
+        #         print("  ", end="")
+            
+        #     print(f"{b:02x} ", end="")
+        # pass
+
+        ## Adjust the ELF file
+        elf_file.seek(block.elf_address)
+        elf_file.write(struct.pack("<I", block.exo_size))
+        elf_file.write(struct.pack("<I", 0))
+        elf_file.write(struct.pack("<I", curr_exo_address))
+        elf_file.write(struct.pack("<I", 0))
+
+        ## Write the EXO block
+        exo_file.seek(curr_exo_address)
+        exo_file.write(bin_data)
+
+        curr_exo_address += len(pad_to_nearest(bin_data, k=1024))
+    
     elf_file.close()
+    exo_file.close()
 
 
 def calculateFreeSpace(elf, exo):

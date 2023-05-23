@@ -1,4 +1,4 @@
-# Endonesia Tool 
+# Endonesia Tool
 
 A tool for packing and unpacking PS2 Endonesia resources.
 
@@ -6,10 +6,10 @@ This tool does not provide the ISO for this game, and we will not provide it for
 
 ## Requirements
 
-* Python 3
-* Imagemagick
-* [Armips](https://github.com/Kingcom/armips)
-* Mounted/extracted files from the game ISO
+- Python 3
+- Imagemagick
+- [Armips](https://github.com/Kingcom/armips)
+- Mounted/extracted files from the game ISO
 
 ## Usage
 
@@ -26,15 +26,15 @@ A JSON file containing the widths of each character is needed to include variabl
 
 ```
 {
-    '[char]': [pixel width],
-    '[another char]': [pixel width],
+    "[char]": [pixel width],
+    "[another char]": [pixel width],
     ...
 }
 ```
 
-`armips` is needed to make the game use the font width table. Because of the way `armips` works, it assumes the ELF file you're trying to change is called `pbpx_952.01`. If your ISO contains an ELF file with a different name, you will have to change this in the first line in `tools/vfw.asm`.
+`armips` is needed to make the game use the font width table. Because of the way `armips` works, it assumes the ELF file you're trying to change is called `SLPM_620.47`. If your ISO contains an ELF file with a different name, you will have to change this in the first line in `tools/vfw.asm`.
 
 ## Roadmap
 
-* Scripts
-* exo.bin assets
+- Scripts
+- exo.bin assets
