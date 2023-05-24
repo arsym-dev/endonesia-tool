@@ -35,6 +35,21 @@ A sample json file has been provided in `assets/font_widths.json`, as well as th
 
 `armips` is needed to make the game use the font width table. Because of the way `armips` works, it assumes the ELF file you're trying to change is called `SLPM_620.47`. If your ISO contains an ELF file with a different name, you will have to change this in the first line in `tools/vfw.asm`.
 
+## Creating the final ISO file
+
+You will need cdvd2iml5.30 to create the ISO. You can download it from here:
+
+PlayStation_2_Mastering_tools_Collection-v1.7z
+https://mega.nz/file/TzhihCjJ#5JCb_DNUklakDtO1t99ZOY0AI_XWXKUiI2BfZhmvjow
+
+1. Run cdvd2iml5.30.msi and install it
+2. Once it's installed, run it from the start menu
+3. Use the program to open the file `assets/endonesia.iml`
+4. At the bottom, press "Full Path" and navigate the folder that has the folder ith the extracted Endonesia files
+5. Press the "iml2iso" button
+
+Once you've done this, you should have a "endonesia.iso" file that you can use
+
 ## Roadmap
 
 - Scripts

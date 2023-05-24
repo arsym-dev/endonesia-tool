@@ -1,0 +1,57 @@
+[SYS]
+VERSION=1.00
+MEDIA=CD
+TARGET=PS2
+DISCVERSION=1.00
+DATE=2023/05/19-08:44:06
+[/SYS]
+
+[CUE]
+DISCNAME=""
+PRODUCER=""
+COPYRIGHT=""
+CREATIONDATE=20230519
+PSTYPE=2
+DISCCODE=01
+#Track   Index   Time        Form        Control        LBN
+ 00      00      00:00:00    CDROM2_0    DATA
+ 01      00      00:00:00    CDROM2_0    DATA
+ 01      00      00:00:00    CDROM2_0    DATA           0
+ AA      01      00:00:00    CDROM2_0    DATA           159026
+[/CUE]
+
+[LOC]
+# the number of entries: 30
+#Start   End      Mode Fno Path
+0        24       2.1  0   "endonesia.ims"
+25       93       2.1  0   "MODULES\IOPRP214.IMG"
+94       106      2.1  0   "MODULES\LIBSD.IRX"
+107      149      2.1  0   "MODULES\MCMAN.IRX"
+150      153      2.1  0   "MODULES\MCSERV.IRX"
+154      156      2.1  0   "MODULES\MODDELAY.IRX"
+157      183      2.1  0   "MODULES\MODHSYN.IRX"
+184      194      2.1  0   "MODULES\MODMIDI.IRX"
+195      197      2.1  0   "MODULES\MODMONO.IRX"
+198      199      2.1  0   "MODULES\MODMSIN.IRX"
+200      201      2.1  0   "MODULES\MODSEIN.IRX"
+202      207      2.1  0   "MODULES\MODSESQ.IRX"
+208      210      2.1  0   "MODULES\MODSSYN.IRX"
+211      214      2.1  0   "MODULES\MSIFRPC.IRX"
+215      236      2.1  0   "MODULES\PADMAN.IRX"
+237      302      2.1  0   "MODULES\RSPU2DRV.IRX"
+303      307      2.1  0   "MODULES\SDRDRV.IRX"
+308      394      2.1  0   "MODULES\SD_IMAIN.IRX"
+395      398      2.1  0   "MODULES\SIO2MAN.IRX"
+399      6172     2.1  0   "SOUND\SD_MMS.BIN"
+6173     6852     2.1  0   "SOUND\SD_MMS1.BIN"
+6853     7091     2.1  0   "SOUND\SD_MMS2.BIN"
+7092     17371    2.1  0   "SOUND\SOUND.BIN"
+17372    19070    2.1  0   "SLPM_620.47"
+19071    19071    2.1  0   "SYSTEM.CNF"
+19072    21274    2.1  0   "WORLD.MAP"
+21275    24010    2.1  0   "WORLD.MDD"
+24011    26866    2.1  0   "WORLD.TEX"
+26867    26867    2.1  0   "EXO.BIN"
+71714    158876   2.1  0   "SOUND\SD_CDS.BIN"
+[/LOC]
+
