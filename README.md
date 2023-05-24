@@ -7,7 +7,6 @@ This tool does not provide the ISO for this game, and we will not provide it for
 ## Requirements
 
 - Python 3
-- Imagemagick
 - [Armips](https://github.com/Kingcom/armips)
 - Mounted/extracted files from the game ISO
 
@@ -31,6 +30,8 @@ A JSON file containing the widths of each character is needed to include variabl
     ...
 }
 ```
+
+A sample json file has been provided in `assets/font_widths.json`, as well as the original font in `assets/font_original.bmp` and a finalized English font in `assets/font_final.png`.
 
 `armips` is needed to make the game use the font width table. Because of the way `armips` works, it assumes the ELF file you're trying to change is called `SLPM_620.47`. If your ISO contains an ELF file with a different name, you will have to change this in the first line in `tools/vfw.asm`.
 

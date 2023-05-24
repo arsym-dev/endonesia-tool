@@ -1,17 +1,17 @@
 import math
 import sys
 import os
-from endotool.utils import tooldir
+from endotool.utils import basedir
 
 TABLE_OFFSET = 0xA1
 
 class TBL:
     tbl = {}
-    PACK = os.path.join(tooldir, '..', 'assets', 'pack.tbl')
+    PACK = os.path.join(basedir, 'assets', 'pack.tbl')
 
     def __init__(self, filename):
         try:
-            tbl_file = open(filename, 'r')
+            tbl_file = open(filename, 'r', encoding='utf-8')
         except IOError as e:
             print(e, file = sys.stderr)
             return False
@@ -19,7 +19,7 @@ class TBL:
         for line in tbl_file:
             parts = line.split('=')
 
-            char = parts[0].strip()
+            char = parts[0] #.strip()
             index = int(parts[1].strip(), 16)
 
             self.tbl[index] = char

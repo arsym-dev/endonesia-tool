@@ -178,38 +178,38 @@ def unpack(elf, exo, output, overwrite = False):
     elf_file.seek(0, os.SEEK_END)
     elfsize = elf_file.tell()
 
-    # #######
-    # ## Extract ELF texts
-    # #######
-    # for i in ELF_POINTERS:
-    #     elf_pointer = i['pointer']
-    #     currentpos = elf_pointer
-    #     currentitem = 0
-    #     while currentitem*4 < i['size']:
-    #         elf_file.seek(currentpos)
-    #         text_pointer = struct.unpack('<I', elf_file.read(4))[0] + ELF_OFFSET
-    #         currentpos = elf_file.tell()
-    #         currentitem += 1
+    #######
+    ## Extract ELF texts
+    #######
+    for i in ELF_POINTERS:
+        elf_pointer = i['pointer']
+        currentpos = elf_pointer
+        currentitem = 0
+        while currentitem*4 < i['size']:
+            elf_file.seek(currentpos)
+            text_pointer = struct.unpack('<I', elf_file.read(4))[0] + ELF_OFFSET
+            currentpos = elf_file.tell()
+            currentitem += 1
 
-    #         if text_pointer < 0x0 or text_pointer >= elfsize:
-    #             # not a valid pointer
-    #             continue
+            if text_pointer < 0x0 or text_pointer >= elfsize:
+                # not a valid pointer
+                continue
 
-    #         elf_file.seek(text_pointer)
-    #         text = jis208.decode(elf_file)
+            elf_file.seek(text_pointer)
+            text = jis208.decode(elf_file)
 
-    #         ## Write output
-    #         if text:
-    #             row = [
-    #                 ELF_ENUM, # FILE
-    #                 dec2hex(elf_pointer), # ELF Pointer
-    #                 0, # EXO Block
-    #                 dec2hex(text_pointer), # Text addr
-    #                 currentitem-1, # Item num
-    #                 text, # JP Text
-    #                 '',# EN Text
-    #             ]
-    #             writer.writerow(row)
+            ## Write output
+            if text:
+                row = [
+                    ELF_ENUM, # FILE
+                    dec2hex(elf_pointer), # ELF Pointer
+                    0, # EXO Block
+                    dec2hex(text_pointer), # Text addr
+                    currentitem-1, # Item num
+                    text, # JP Text
+                    '',# EN Text
+                ]
+                writer.writerow(row)
 
     #######
     ## Extract EXO.bin texts
@@ -218,6 +218,7 @@ def unpack(elf, exo, output, overwrite = False):
 
     ## Write output
     for exoblock in blocks:
+        wrote = False
         for entry in exoblock.text_entries:
 
             # Only print non-duplicated blocks
@@ -235,6 +236,10 @@ def unpack(elf, exo, output, overwrite = False):
             ]
 
             writer.writerow(row)
+            wrote = True
+        
+        if wrote:
+            writer.writerow([])
         
 
 def pack(input, elf, exo):
@@ -525,6 +530,9 @@ def pack2(input, elf, exo):
     elf_rows = []
     exo_rows = {}
     for row in csv_data:
+        if len(row)==0:
+            continue
+
         if row[0] == ELF_ENUM:
             elf_rows.append(row)
         elif row[0] == EXO_ENUM:

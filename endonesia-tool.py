@@ -8,8 +8,9 @@ import inspect
 from endotool import utils, font, scripts
 
 filename = inspect.getframeinfo(inspect.currentframe()).filename
-tooldir = os.path.dirname(os.path.abspath(filename))
-utils.tooldir = tooldir
+basedir = os.path.dirname(os.path.abspath(filename))
+utils.basedir = basedir
+# os.path.dirname(os.path.realpath(__file__))
 
 class EndonesiaParser(argparse.ArgumentParser):
     def error(self, message):

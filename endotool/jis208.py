@@ -11,38 +11,44 @@ table = [12288,12289,12290,65292,65294,12539,65306,65307,65311,65281,12443,12444
 
 ascii2eucjptbl = {
     ' ': bytearray([0xa1, 0xa1]),
-    '!': bytearray([0xa1, 0xaa]),
-    '"': bytearray([0xa1, 0xab]),
-    '#': bytearray([0xa1, 0xf4]),
-    '$': bytearray([0xa1, 0xf0]),
-    '%': bytearray([0xa1, 0xf3]),
-    '&': bytearray([0xa1, 0xf5]),
-    "'": bytearray([0xa1, 0xad]),
-    '(': bytearray([0xa1, 0xca]),
-    ')': bytearray([0xa1, 0xca]),
-    '*': bytearray([0xa1, 0xcb]),
-    '+': bytearray([0xa1, 0xdc]),
     ',': bytearray([0xa1, 0xa4]),
-    '-': bytearray([0xa1, 0xdd]),
     '.': bytearray([0xa1, 0xa5]),
-    '/': bytearray([0xa1, 0xbf]),
     ':': bytearray([0xa1, 0xa7]),
     ';': bytearray([0xa1, 0xa8]),
-    '<': bytearray([0xa1, 0xe3]),
-    '=': bytearray([0xa1, 0xe1]),
-    '>': bytearray([0xa1, 0xe4]),
     '?': bytearray([0xa1, 0xa9]),
-    '@': bytearray([0xa1, 0xf7]),
-    '[': bytearray([0xa1, 0xce]),
-    '\\': bytearray([0xa1, 0xc0]),
-    ']': bytearray([0xa1, 0xcf]),
+    '!': bytearray([0xa1, 0xaa]),
+    '`': bytearray([0xa1, 0xae]),
+
     '^': bytearray([0xa1, 0xb0]),
     '_': bytearray([0xa1, 0xb2]),
-    '`': bytearray([0xa1, 0xae]),
-    '{': bytearray([0xa1, 0xd0]),
-    '|': bytearray([0xa1, 0xc3]),
-    '}': bytearray([0xa1, 0xd1]),
+    '/': bytearray([0xa1, 0xbf]),
+
+    '\\': bytearray([0xa1, 0xc0]),
     '~': bytearray([0xa1, 0xc1]),
+    '|': bytearray([0xa1, 0xc3]),
+    "'": bytearray([0xa1, 0xc7]),
+    '"': bytearray([0xa1, 0xc9]),
+    '(': bytearray([0xa1, 0xca]),
+    ')': bytearray([0xa1, 0xcb]),
+    '[': bytearray([0xa1, 0xce]),
+    ']': bytearray([0xa1, 0xcf]),
+
+    '{': bytearray([0xa1, 0xd0]),
+    '}': bytearray([0xa1, 0xd1]),
+
+    '+': bytearray([0xa1, 0xdc]),
+    '-': bytearray([0xa1, 0xdd]),
+    
+    '=': bytearray([0xa1, 0xe1]),
+    '<': bytearray([0xa1, 0xe3]),
+    '>': bytearray([0xa1, 0xe4]),
+    
+    '$': bytearray([0xa1, 0xf0]),
+    '%': bytearray([0xa1, 0xf3]),
+    '#': bytearray([0xa1, 0xf4]),
+    '&': bytearray([0xa1, 0xf5]),
+    '*': bytearray([0xa1, 0xf6]),
+    '@': bytearray([0xa1, 0xf7]),
 }
 
 def convertToString(index):
@@ -103,22 +109,6 @@ def decode(data):
         text += result
     return text
 
-def parse_special_char(string, index):
-    if isSpecialStart(string[index]):
-        address = '' 
-        i = 0
-        while True:
-            i += 1
-            if isSpecialEnd(string[index + i]):
-                i += 1
-                break
-            address += string[index + i]
-        ## @TODO: Handle both 1 byte and 2 byte {special bytes}
-        return {'value': struct.pack(">H", int(address, 16)), 'length': i}
-    if string[index] == '\\':
-        return {'value': struct.pack("B", LINEBREAK), 'length': 2}
-    return False
-
 def stringToHex(string, transform_ascii=False):
     ## Convert ascii characters to their EUC_JP equivalent
     ## The game does not properly handle one-byte characters
@@ -178,46 +168,6 @@ def stringToHex(string, transform_ascii=False):
             continue
         
         ## Process japanese characters
-        rv += struct.pack(">H", convertToHex(char))
-    
-    return rv
-    # return rv.decode("eucjp") #jis208
-
-def stringToHex2(string, transform_ascii=False):
-    rv = b""
-
-    size = len(string)
-    i = 0
-    while i < size:
-        char = string[i]
-        parse = parse_special_char(string, i)
-        if parse:
-            rv += parse['value']
-            i += parse['length']
-            continue
-        
-        i += 1
-
-        ## Convert ascii characters to their EUC_JP equivalent
-        ## The game does not properly handle one-byte characters
-        ## hence the need for this hack
-        if transform_ascii:
-            if char>='0' and char<='9':
-                rv += bytearray([0xa3, 0xB0+int(char)])
-                continue
-
-            if char>='A' and char<='Z':
-                rv += bytearray([0xa3, 0xC1+ord(char)-ord('A')])
-                continue
-
-            if char>='a' and char<='z':
-                rv += bytearray([0xa3, 0xE1+ord(char)-ord('a')])
-                continue
-
-            if char in ascii2eucjptbl:
-                rv += ascii2eucjptbl[char]
-                continue
-
         rv += struct.pack(">H", convertToHex(char))
     
     return rv

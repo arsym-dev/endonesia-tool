@@ -1,6 +1,6 @@
 from shutil import which
 
-tooldir = ''
+basedir = ''
 
 def read_in_chunks(file_object, chunk_size = 4, size = 0):
     currentsize = 0
