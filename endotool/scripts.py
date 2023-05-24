@@ -1,14 +1,13 @@
 from typing import List
 import struct
 import os
-import io
 import csv
 import sys
 import shutil
 import math
 
 from endotool import jis208
-from endotool.utils import read_in_chunks, csv_find, pad_to_nearest
+from endotool.utils import pad_to_nearest
 from endotool.file_structures import *
 
 CSV_DELIMETER = '|'
@@ -135,11 +134,6 @@ def getExoBlocks(elf_file, exo_file) -> List[ExoScriptBlock]:
         exo_address = struct.unpack('<I', elf_file.read(4))[0]
         zeros = struct.unpack('<I', elf_file.read(4))[0]
 
-        
-        # if exo_address > 0x06000000 or exo_address < 0x04000000:
-        #     continue
-        
-
         ## Go to the block in the EXO file, read it, then save it to csv
         exoblock = ExoScriptBlock(
             exo_size=exo_size,
@@ -240,218 +234,8 @@ def unpack(elf, exo, output, overwrite = False):
         
         if wrote:
             writer.writerow([])
-        
-
-def pack(input, elf, exo):
-    try:
-        csvfile = open(input, 'r', encoding='utf-8')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
-
-    try:
-        elf_file = open(elf, 'rb+')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
-
-    try:
-        exo_file = open(exo, 'rb+')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
-
-    csv_data = csvfile.read().replace('\0', '').split('\n')
-    reader = csv.reader(csv_data, delimiter=CSV_DELIMETER, escapechar=CSV_ESCAPECHAR, lineterminator=CSV_LINETERMINATOR)
-    csv_data = [r for r in reader]
-
-
-    #Prepare for packing
-    exodata = []
-    exo_pointers = []
-    elf_file.seek(EXO_POINTERS)
-
-    exo_file.seek(0, os.SEEK_END)
-    original_exo_size = exo_file.tell()
-    while True:
-        pointer = struct.unpack('<I', elf_file.read(4))[0]
-        if pointer == 0x0:
-            break
-        exo_pointers.append(pointer)
-        elf_file.seek(0xC, 1)
-    exo_file.seek(exo_pointers[0])
-    exo_buffer = io.BytesIO()
-
-    reserved_pointer = RESERVED
-    elf_file.seek(RESERVED)
-    while True:
-        check = struct.unpack('<H', elf_file.read(2))[0]
-        if check == 0x0:
-            elf_file.seek(2, 1)
-            reserved_pointer = elf_file.tell()
-            break
-
-    exo_offset = exo_pointers[0]
-
-    for piece in read_in_chunks(exo_file, size = original_exo_size - exo_offset):
-        exo_buffer.write(piece)
-
-    for row in csv_data:
-        text = row[3] if not row[4] or row[4] == ' ' else row[4]
-        required_size = hex_length(text)
-        if row[2] == ELF_ENUM:
-            elf_file.seek(int(row[1], 16))
-            available_size = string_size(elf_file)
-            if required_size > available_size:
-                elf_file.seek(reserved_pointer)
-                if not is_empty(elf_file, required_size):
-                    print('Not enough reserved space left in the ELF file.')
-                    return 2
-                elf_file.seek(int(row[0], 16))
-                elf_file.write(struct.pack('<I', reserved_pointer))
-                elf_file.seek(reserved_pointer)
-                reserved_pointer += required_size + 2
-
-            size = len(text)
-            i = 0
-            while i < size:
-                char = text[i]
-                parse = parse_special_char(text, i)
-                pack_format = '>H'
-                if parse:
-                    hex_value = int(parse['address'])
-                    i += parse['length']
-                    pack_format = parse['format']
-                else:
-                    hex_value = jis208.convertToHex(char)
-                    i += 1
-                elf_file.write(struct.pack(pack_format, hex_value))
-        elif row[2] == EXO_ENUM:
-            elf_file.seek(int(row[0], 16))
-            pointer = struct.unpack('<I', elf_file.read(4))[0]
-            pointer_index = exo_pointers.index(pointer)
-
-            exo_buffer.seek(pointer - exo_offset)
-            exo_newbuffer = io.BytesIO()
-            block_size = exo_pointers[pointer_index + 1] - exo_pointers[pointer_index] if pointer_index < len(exo_pointers) else original_exo_size - exo_pointers[pointer_index]
-            for piece in read_in_chunks(exo_buffer, size = block_size):
-                exo_newbuffer.write(piece)
-
-            exo_newbuffer.seek(0)
-            length = struct.unpack('<I', exo_newbuffer.read(4))[0]
-            content_length = struct.unpack('<I', exo_newbuffer.read(4))[0]
-            exo_newbuffer.seek(int(row[1], 16))
-            textpos = struct.unpack('<I', exo_newbuffer.read(4))[0]
-            exo_newbuffer.seek(textpos)
-            print(f"{hex(textpos)}\t{length}\t{content_length}\t0x{row[1]}\t0x{row[0]}, {int(row[1], 16)}, {int(row[0], 16)}")
-            available_size = string_size(exo_newbuffer)
-            if available_size < required_size:
-                sizediff = required_size - available_size + (-required_size % 0x8)
-                exo_newbuffer.seek(content_length)
-                text_pointers = []
-                for piece in read_in_chunks(exo_newbuffer, size = length - content_length):
-                    text_pointers.append(struct.unpack('<I', piece)[0])
-
-                size = len(text_pointers)
-                for i in range(0, size):
-                    if text_pointers[i] > textpos:
-                        text_pointers[i] += sizediff
-
-                exo_newbuffer.seek(content_length)
-                for i in range(0, size):
-                    exo_newbuffer.write(struct.pack('<I', text_pointers[i]))
-
-                exo_backbuffer = io.BytesIO()
-                exo_newbuffer.seek(textpos + available_size)
-
-                #Shift everything in the block down
-                backbuffer_size = length - exo_newbuffer.tell()
-                for piece in read_in_chunks(exo_newbuffer, size = backbuffer_size):
-                    exo_backbuffer.write(piece)
-
-                exo_newbuffer.seek(textpos)
-
-            size = len(text)
-            i = 0
-            while i < size:
-                char = text[i]
-                parse = parse_special_char(text, i)
-                pack_format = '>H'
-                if parse:
-                    hex_value = int(parse['address'])
-                    i += parse['length']
-                    pack_format = parse['format']
-                else:
-                    hex_value = jis208.convertToHex(char)
-                    i += 1
-                exo_newbuffer.write(struct.pack(pack_format, hex_value))
-
-            if available_size < required_size:
-                padsize = required_size % 0x8
-                for i in range(0, padsize):
-                    exo_newbuffer.write(struct.pack('B', 0))
-
-                exo_newbuffer.seek(-sizediff, os.SEEK_END)
-                for piece in read_in_chunks(exo_backbuffer):
-                    exo_newbuffer.write(piece)
-                exo_backbuffer.close()
-
-                exo_newbuffer.seek(0)
-                exo_newbuffer.write(struct.pack('<I', length + sizediff))
-                exo_newbuffer.write(struct.pack('<I', content_length + sizediff))
-
-                #Check if we need to shift all the other blocks below the current one
-                if not is_empty(exo_newbuffer, sizediff):
-                    blockdiff = sizediff + (-sizediff % 0x800)
-                    exo_backbuffer = io.BytesIO()
-                    exo_buffer.seek(pointer - exo_offset + length)
-                    for piece in read_in_chunks(exo_buffer):
-                        exo_backbuffer.write(piece)
-
-                    exo_newbuffer.seek(0)
-                    exo_buffer.seek(pointer - exo_offset)
-                    for piece in read_in_chunks(exo_newbuffer):
-                        exo_buffer.write(piece)
-
-                    for i in range(0, -sizediff % 0x800):
-                        exo_buffer.write(struct.pack('B', 0))
-
-                    for piece in read_in_chunks(exo_backbuffer):
-                        exo_buffer.write(piece)
-
-                    exo_backbuffer.close()
-
-                    size = len(exo_pointers)
-                    for i in range(pointer_index + 1, size):
-                        exo_pointers[i] += blockdiff
-
-            exo_newbuffer.close()
-
-    elf_file.seek(EXO_POINTERS)
-    size = len(exo_pointers)
-    for i in range(0, size):
-        elf_file.write(struct.pack('<I', exo_pointers[i]))
-        elf_file.seek(0xC, 1)
-
-    exo_file.seek(exo_offset)
-    exo_buffer.seek(0)
-
-    for piece in read_in_chunks(exo_buffer):
-        exo_file.write(piece)
-
 
 def pack2(input, elf, exo):
-    # b = ExoScriptBlock(["I hope you don't mind monospaced fonts"])
-    # rv = b.pack()
-
-    # for i, b in enumerate(rv):
-    #     if i % 16 == 0:
-    #         print("\n", end="")
-    #     if i % 4 == 0:
-    #         print("  ", end="")
-        
-    #     print(f"{b:02x} ", end="")
-    # pass
 
     try:
         csvfile = open(input, 'r', encoding='utf-8')
@@ -490,41 +274,6 @@ def pack2(input, elf, exo):
     reader = csv.reader(csv_raw, delimiter=CSV_DELIMETER, escapechar=CSV_ESCAPECHAR, lineterminator=CSV_LINETERMINATOR)
     csv_data = [r for r in reader]
     csvfile.close()
-
-    # #######
-    # ## Load up the blocks from the original file and save them as-is, but more compressed
-    # #######
-    # blocks = getExoBlocks(elf_file, exo_file)
-    # curr_exo_address = blocks[0].exo_address
-
-    # for block in blocks:
-    #     bin_data = block.toBinary()
-
-    #     # for i, b in enumerate(bin_data):
-    #     #     if i % 16 == 0:
-    #     #         print("\n", end="")
-    #     #     if i % 4 == 0:
-    #     #         print("  ", end="")
-            
-    #     #     print(f"{b:02x} ", end="")
-    #     # pass
-
-    #     ## Adjust the ELF file
-    #     elf_file.seek(block.elf_address)
-    #     elf_file.write(struct.pack("<I", block.exo_size))
-    #     elf_file.write(struct.pack("<I", 0))
-    #     elf_file.write(struct.pack("<I", curr_exo_address))
-    #     elf_file.write(struct.pack("<I", 0))
-
-    #     ## Write the EXO block
-    #     exo_file.seek(curr_exo_address)
-    #     exo_file.write(bin_data)
-
-    #     curr_exo_address += len(pad_to_nearest(bin_data, k=1024))
-    
-    # elf_file.close()
-    # exo_file.close()
-
 
     ## Pre-process the CSV data
     elf_rows = []
@@ -582,7 +331,6 @@ def pack2(input, elf, exo):
 
     ## Process EXO rows nd add translated text to them
     for elf_pointer, rows in exo_rows.items():
-        strings = []
         for row in rows:
             elf_pointer = int(row[1], 16)
             exo_block = int(row[2], 16)
@@ -608,11 +356,6 @@ def pack2(input, elf, exo):
             if found_entry is None:
                 raise Exception("Entry not found")
 
-
-            # entry = ExoScriptTextEntry()
-            # entry.item_num = item_num
-            # entry.offset = text_address
-
             if text_en != '':
                 found_entry.text = text_en
                 found_entry.transform_ascii = True
@@ -626,15 +369,6 @@ def pack2(input, elf, exo):
 
     for block in blocks:
         bin_data = block.toBinary()
-
-        # for i, b in enumerate(bin_data):
-        #     if i % 16 == 0:
-        #         print("\n", end="")
-        #     if i % 4 == 0:
-        #         print("  ", end="")
-            
-        #     print(f"{b:02x} ", end="")
-        # pass
 
         ## Adjust the ELF file
         elf_file.seek(block.elf_address)
