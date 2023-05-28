@@ -145,7 +145,7 @@ def getExoBlocks(elf_file, exo_file) -> List[ExoScriptBlock]:
         blocks.append(exoblock)
     return blocks
 
-def unpack(elf, exo, output, overwrite = False):
+def extract(elf, exo, output, overwrite = False):
     try:
         elf_file = open(elf, 'rb')
     except IOError as e:
@@ -235,7 +235,7 @@ def unpack(elf, exo, output, overwrite = False):
         if wrote:
             writer.writerow([])
 
-def pack2(input, elf, exo):
+def rebuild(input, elf, exo):
 
     try:
         csvfile = open(input, 'r', encoding='utf-8')

@@ -17,7 +17,7 @@ BITDEPTH = 4
 WIDTH_TABLE = 0x33D4D0
 TABLE_SIZE = 0x11A
 
-def unpack(input, output):
+def extract(input, output):
     if len(input) <= 0:
         print('Please enter a valid ELF file path.', file = sys.stderr)
         return 2
@@ -38,7 +38,7 @@ def unpack(input, output):
 
     # subprocess.run(['convert', '-flip', output, output])
 
-def pack(input, output, variable_width = False):
+def rebuild(input, output, variable_width = False):
     try:
         elf = open(output, 'rb+')
     except IOError as e:

@@ -154,14 +154,13 @@ script_pack_parser.add_argument(
 args = parser.parse_args()
 
 if args.cmd == 'font-unpack':
-    font.unpack(args.input, args.output)
+    font.extract(args.input, args.output)
 elif args.cmd == 'font-pack':
-    font.pack(args.input, args.output, args.variable_width)
+    font.rebuild(args.input, args.output, args.variable_width)
 elif args.cmd == 'script-unpack':
-    scripts.unpack(args.elf_file, args.exo_bin, args.output, args.overwrite_csv)
+    scripts.extract(args.elf_file, args.exo_bin, args.output, args.overwrite_csv)
 elif args.cmd == 'script-pack':
-    # scripts.pack(args.input, args.elf_file, args.exo_bin)
-    scripts.pack2(args.input, args.elf_file, args.exo_bin)
+    scripts.rebuild(args.input, args.elf_file, args.exo_bin)
 #     scripts.calculateFreeSpace(args.elf_file, args.exo_bin)
 
 if len(sys.argv)==1:
