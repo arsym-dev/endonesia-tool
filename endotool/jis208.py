@@ -62,6 +62,10 @@ def convertToString(index):
         
         if lower_byte == LINEBREAK:
             return "\\n"
+        
+        if lower_byte == 0x25:
+            ## Used for %n (player name) and %d (debug string?)
+            return f'{SPECIAL_CHAR_START}{lower_byte:02X}{upper_byte:02X}{SPECIAL_CHAR_END}'
 
         if lower_byte < 0x20:
             return f'{SPECIAL_CHAR_START}{lower_byte:02X}{SPECIAL_CHAR_END}'
@@ -94,7 +98,7 @@ def decode(data):
         b = struct.unpack('B', data.read(1))[0]
 
         ## ASCII text
-        if b <= 0x7F:
+        if b <= 0x7F and b != 0x25:
             result = convertToString(b)
         
         ## Japanese text

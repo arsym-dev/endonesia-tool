@@ -145,32 +145,16 @@ def getExoBlocks(elf_file, exo_file) -> List[ExoScriptBlock]:
         blocks.append(exoblock)
     return blocks
 
-def extract(elf, exo, output, overwrite = False):
-    try:
-        elf_file = open(elf, 'rb')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
+def extract(fname_elf, fname_exo, fname_csv, overwrite = False):
+    elf_file = open(fname_elf, 'rb')
+    exo_file = open(fname_exo, 'rb')
 
-    try:
-        exo_file = open(exo, 'rb')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
+    if os.path.exists(fname_csv) and not overwrite:
+        print("CSV already exists. Use the overwrite flag if you want to overwrite this file")
 
-    if os.path.exists(output) and not overwrite:
-            print("CSV already exists. Use the overwrite flag if you want to overwrite this file")
-
-    try:
-        output_file = open(output, 'w', encoding='utf-8')
-        writer = csv.writer(output_file, delimiter=CSV_DELIMETER, escapechar=CSV_ESCAPECHAR, lineterminator=CSV_LINETERMINATOR)
-        writer.writerow(["File", "ELF Pointer", "EXO Block", "Text addr", "Item num", "JP text", "EN text"])
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
-
-    elf_file.seek(0, os.SEEK_END)
-    elfsize = elf_file.tell()
+    csv_file = open(fname_csv, 'w', encoding='utf-8')
+    writer = csv.writer(csv_file, delimiter=CSV_DELIMETER, escapechar=CSV_ESCAPECHAR, lineterminator=CSV_LINETERMINATOR)
+    writer.writerow(["File", "ELF Pointer", "EXO Block", "Text addr", "Item num", "JP text", "EN text"])
 
     #######
     ## Extract ELF texts
@@ -193,8 +177,10 @@ def extract(elf, exo, output, overwrite = False):
     #######
     ## Extract EXO.bin texts
     #######
+    print("Reading EXO data")
     blocks = getExoBlocks(elf_file, exo_file)
 
+    print("Writing CSV")
     ## Write output
     for exoblock in blocks:
         wrote = False
@@ -219,39 +205,24 @@ def extract(elf, exo, output, overwrite = False):
         
         if wrote:
             writer.writerow([])
+    
+    elf_file.close()
+    exo_file.close()
+    csv_file.close()
+    print("Done")
 
-def rebuild(input, elf, exo):
-    try:
-        csvfile = open(input, 'r', encoding='utf-8')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
+def rebuild(fname_csv, fname_elf_in, fname_elf_out, fname_exo_in, fname_exo_out):
+    csvfile = open(fname_csv, 'r', encoding='utf-8')
 
-    # Back up the elf file first
-    # Then use the backup as the basis for our new write
-    if not os.path.exists(elf+".bak"):
-        shutil.copyfile(elf, elf+".bak")
-    else:
-        shutil.copyfile(elf+".bak", elf)
+    # Use the backup ELF as the basis for our new write
+    elf_file_out = open(fname_elf_out, 'rb+')
+    with open(fname_elf_in, 'rb') as elf_file_in:
+        elf_file_out.write(elf_file_in.read())
 
-    try:
-        elf_file = open(elf, 'rb+')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
-
-    # Back up the exo file first
-    # Then use the backup as the basis for our new write
-    if not os.path.exists(exo+".bak"):
-        shutil.copyfile(exo, exo+".bak")
-    else:
-        shutil.copyfile(exo+".bak", exo)
-
-    try:
-        exo_file = open(exo, 'rb+')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
+    # Use the backup EXO as the basis for our new write
+    exo_file_out = open(fname_exo_out, 'rb+')
+    with open(fname_exo_in, 'rb') as exo_file_in:
+        exo_file_out.write(exo_file_in.read())
 
     ## Read all the csv lines
     csv_raw = csvfile.read().replace('\0', '').split('\n')
@@ -260,6 +231,7 @@ def rebuild(input, elf, exo):
     csvfile.close()
 
     ## Pre-process the CSV data
+    print("Processing CSV file")
     elf_rows = {}
     exo_rows = {}
     for row in csv_data:
@@ -283,9 +255,11 @@ def rebuild(input, elf, exo):
     ## ELF Blocks
     ## Process EXO rows and add translated text to them
     #######
+    print("Reading old ELF data")
     elf_mgr = ElfTextManager()
-    elf_mgr.readFromFile(elf_file)
+    elf_mgr.readFromFile(elf_file_out)
 
+    print("Rebuilding ELF file")
     for elf_address, rows in elf_rows.items():
         for row in rows:
             elf_address = int(row[1], 16)
@@ -310,15 +284,17 @@ def rebuild(input, elf, exo):
                 found_entry.text = text_jp
                 found_entry.transform_ascii = False
     
-    elf_mgr.writeToFile(elf_file)
+    elf_mgr.writeToFile(elf_file_out)
     
 
     #######
     ## EXO Blocks
     ## Load up the blocks from the original file and save them as-is, but more compressed
     #######
-    blocks = getExoBlocks(elf_file, exo_file)
+    print("Reading old EXO data")
+    blocks = getExoBlocks(elf_file_out, exo_file_out)
 
+    print("Rebuilding EXO file")
     ## Process EXO rows nd add translated text to them
     for elf_pointer, rows in exo_rows.items():
         for row in rows:
@@ -361,34 +337,26 @@ def rebuild(input, elf, exo):
         bin_data = entry.toBinary()
 
         ## Adjust the ELF file
-        elf_file.seek(entry.elf_address)
-        elf_file.write(struct.pack("<I", entry.exo_size))
-        elf_file.write(struct.pack("<I", 0))
-        elf_file.write(struct.pack("<I", curr_exo_address))
-        elf_file.write(struct.pack("<I", 0))
+        elf_file_out.seek(entry.elf_address)
+        elf_file_out.write(struct.pack("<I", entry.exo_size))
+        elf_file_out.write(struct.pack("<I", 0))
+        elf_file_out.write(struct.pack("<I", curr_exo_address))
+        elf_file_out.write(struct.pack("<I", 0))
 
         ## Write the EXO block
-        exo_file.seek(curr_exo_address)
-        exo_file.write(bin_data)
+        exo_file_out.seek(curr_exo_address)
+        exo_file_out.write(bin_data)
 
         curr_exo_address += len(pad_to_nearest(bin_data, k=1024))
     
-    elf_file.close()
-    exo_file.close()
+    elf_file_out.close()
+    exo_file_out.close()
+    print("Done")
 
 
 def calculateFreeSpace(elf, exo):
-    try:
-        elf_file = open(elf, 'rb')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
-
-    try:
-        exo_file = open(exo, 'rb')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
+    elf_file = open(elf, 'rb')
+    exo_file = open(exo, 'rb')
 
     #######
     ## Extract EXO.bin texts

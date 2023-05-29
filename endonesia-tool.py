@@ -19,151 +19,212 @@ class EndonesiaParser(argparse.ArgumentParser):
         sys.exit(2)
 
 parser = EndonesiaParser(
-        description = 'This tool rebuilds and extracts graphics and text assets in the PS2 game, Endonesia.'
-        , formatter_class = argparse.ArgumentDefaultsHelpFormatter
-        )
+    description = 'This tool rebuilds and extracts graphics and text assets in the PS2 game, Endonesia.',
+    formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    )
 
 subparser = parser.add_subparsers(
-        dest = 'cmd'
-        , help = 'Available commands'
-        )
-font_extract_parser = subparser.add_parser('font-extract'
-        , help = 'extract font graphics from ELF file.'
-        )
+    dest = 'cmd',
+    help = 'Available commands'
+    )
+
+#########
+## Font extract
+#########
+font_extract_parser = subparser.add_parser('font-extract',
+    help = 'Extract font graphics from ELF file.'
+    )
 
 font_extract_parser.add_argument(
-        '-i'
-        , '--input'
-        , required = True
-        , action = 'store'
-        , metavar = '[ELF file]'
-        , help = 'ELF file to extract. Normally called "SLPM_620.47".'
-        )
+    '-e',
+    # '--elf-file',
+    required = True,
+    action = 'store',
+    metavar = '[input ELF]',
+    help = 'ELF file to extract. Normally called "SLPM_620.47".'
+    )
 
 font_extract_parser.add_argument(
-        '-o'
-        , '--output'
-        , required = True
-        , action = 'store'
-        , metavar = '[font file]'
-        , help = 'Output file in bmp format.'
-        )
+    '-f',
+    # '-font',
+    required = True,
+    action = 'store',
+    metavar = '[output IMAGE]',
+    help = 'Output image in BMP format.'
+    )
 
-font_rebuild_parser = subparser.add_parser('font-rebuild'
-        , help = 'rebuild font graphics back into ELF file.'
-        )
-
-font_rebuild_parser.add_argument(
-        '-i'
-        , '--input'
-        , required = True
-        , action = 'store'
-        , metavar = '[font file]'
-        , help = 'Font graphics to rebuild in bmp format.'
-        )
+#########
+## Font rebuild
+#########
+font_rebuild_parser = subparser.add_parser('font-rebuild',
+    help = 'Rebuild font graphics back into ELF file.'
+    )
 
 font_rebuild_parser.add_argument(
-        '-o'
-        , '--output'
-        , required = True
-        , action = 'store'
-        , metavar = '[ELF file]'
-        , help = 'ELF file to rebuild. Normally called "SLPM_620.47".'
-        )
+    '-f',
+    # '-font',
+    required = True,
+    action = 'store',
+    metavar = '[input IMAGE]',
+    help = 'Font graphic to rebuild. Can be BMP or PNG.'
+    )
 
 font_rebuild_parser.add_argument(
-        '-v'
-        , '--variable-width'
-        , required = False
-        , action = 'store'
-        , metavar = '[VFW table]'
-        , help = 'JSON file used for variable font widths. Requires armips. Variable font width hacks will not be included without this table.'
-        )
+    '-v',
+    # '--variable-width',
+    required = False,
+    action = 'store',
+    metavar = '[output JSON]',
+    help = 'JSON file used for variable font widths. Requires armips. Variable font width hacks will not be included without this table.'
+    )
 
-script_extract_parser = subparser.add_parser('script-extract'
-        , help = 'extract scripts from the game files.'
-        )
+font_rebuild_parser.add_argument(
+    '-ei',
+    # '--elf-file',
+    required = True,
+    action = 'store',
+    metavar = '[input ELF]',
+    help = 'Input ELF file'
+    )
 
-script_extract_parser.add_argument(
-        '-p'
-        , '--elf-file'
-        , required = True
-        , action = 'store'
-        , metavar = '[ELF file]'
-        , help = 'ELF file to extract scripts from. Normally called "SLPM_620.47".'
-        )
+font_rebuild_parser.add_argument(
+    '-eo',
+    # '--elf-file',
+    required = True,
+    action = 'store',
+    metavar = '[output ELF]',
+    help = 'Output ELF file'
+    )
 
-script_extract_parser.add_argument(
-        '-e'
-        , '--exo-bin'
-        , required = True
-        , action = 'store'
-        , metavar = '[exo.bin file]'
-        , help = 'exo.bin assets file to extract scripts from.'
-        )
-
-script_extract_parser.add_argument(
-        '-r'
-        , '--overwrite-csv'
-        , action = 'store_true'
-        , help = 'The default behavior for extracting to existing CSV files is to only add new entries and leave the existing ones alone. If this flag is enabled and the CSV output file already exists, existing original textsin the CSV file will be overwritten.'
-        )
+#########
+## Script extract
+#########
+script_extract_parser = subparser.add_parser('script-extract',
+help = 'Extract scripts from the game files.'
+    )
 
 script_extract_parser.add_argument(
-        '-o'
-        , '--output'
-        , required = True
-        , action = 'store'
-        , metavar = '[CSV file]'
-        , help = 'CSV file to dump scripts into.'
-        )
+    '-e',
+    # '--elf-file',
+    required = True,
+    action = 'store',
+    metavar = '[input ELF]',
+    help = 'ELF file to extract scripts from. Normally called "SLPM_620.47".'
+    )
 
-script_rebuild_parser = subparser.add_parser('script-rebuild'
-        , help = 'rebuild scripts back into the game files.'
-        )
+script_extract_parser.add_argument(
+    '-x',
+    # '--exofin',
+    required = True,
+    action = 'store',
+    metavar = '[input EXO.BIN]',
+    help = 'exo.bin assets file to extract scripts from.'
+    )
+
+script_extract_parser.add_argument(
+    '-c',
+    # '--csv',
+    required = True,
+    action = 'store',
+    metavar = '[output CSV]',
+    help = 'CSV file to dump scripts into.'
+    )
+
+script_extract_parser.add_argument(
+    '-r',
+    # '--overwrite-csv',
+    action = 'store_true',
+    help = 'If this flag is enabled and the CSV output file already exists, the CSV file will be overwritten. Default behavior is to only add new entries and leave the existing ones alone.'
+    )
+
+#########
+## Script rebuild
+#########
+script_rebuild_parser = subparser.add_parser('script-rebuild',
+    help = 'Rebuild scripts back into the game files.'
+    )
 
 script_rebuild_parser.add_argument(
-        '-p'
-        , '--elf-file'
-        , required = True
-        , action = 'store'
-        , metavar = '[ELF file]'
-        , help = 'ELF file to rebuild scripts into. Normally called "SLPM_620.47".'
-        )
+    '-c',
+    # '--csv',
+    required = True,
+    action = 'store',
+    metavar = '[input CSV]',
+    help = 'CSV file to rebuild scripts from.'
+    )
 
 script_rebuild_parser.add_argument(
-        '-e'
-        , '--exo-bin'
-        , required = True
-        , action = 'store'
-        , metavar = '[exo.bin file]'
-        , help = 'exo.bin assets file to rebuild scripts into.'
-        )
+    '-ei',
+    # '--elf-file',
+    required = True,
+    action = 'store',
+    metavar = '[input ELF]',
+    help = 'Input ELF file.'
+    )
 
 script_rebuild_parser.add_argument(
-        '-i'
-        , '--input'
-        , required = True
-        , action = 'store'
-        , metavar = '[CSV file]'
-        , help = 'CSV file to rebuild scripts from.'
-        )
+    '-eo',
+    # '--elf-file',
+    required = True,
+    action = 'store',
+    metavar = '[output ELF]',
+    help = 'Output ELF file to rebuild scripts into. Normally called "SLPM_620.47".'
+    )
 
+script_rebuild_parser.add_argument(
+    '-xi',
+    # '--exofin',
+    required = True,
+    action = 'store',
+    metavar = '[input EXO.BIN]',
+    help = 'Input EXO.BIN assets file.'
+    )
 
+script_rebuild_parser.add_argument(
+    '-xo',
+    # '--exofin',
+    required = True,
+    action = 'store',
+    metavar = '[output EXO.BIN]',
+    help = 'Output EXO.BIN assets file to rebuild scripts into.'
+    )
 
+# try:
 args = parser.parse_args()
 
 if args.cmd == 'font-extract':
-    font.extract(args.input, args.output)
+    font.extract(
+        fname_elf = args.e,
+        fname_font = args.f
+        )
 elif args.cmd == 'font-rebuild':
-    font.rebuild(args.input, args.output, args.variable_width)
+    font.rebuild(
+        fname_font = args.f,
+        variable_width = args.v,
+        fname_elf_in = args.ei,
+        fname_elf_out = args.eo,
+    )
 elif args.cmd == 'script-extract':
-    scripts.extract(args.elf_file, args.exo_bin, args.output, args.overwrite_csv)
+    scripts.extract(
+        fname_elf = args.e,
+        fname_exo = args.x,
+        fname_csv = args.c,
+        overwrite = args.r
+        )
 elif args.cmd == 'script-rebuild':
-    scripts.rebuild(args.input, args.elf_file, args.exo_bin)
+    scripts.rebuild(
+        fname_csv = args.c,
+        fname_elf_in = args.ei,
+        fname_elf_out = args.eo,
+        fname_exo_in = args.xi,
+        fname_exo_out = args.xo,
+    )
 #     scripts.calculateFreeSpace(args.elf_file, args.exo_bin)
 
 if len(sys.argv)==1:
     parser.print_help(sys.stderr)
     sys.exit(1)
 
+# except IOError as e:
+    # print(e, file = sys.stderr)
+    # sys.exit(2)

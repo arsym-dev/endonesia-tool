@@ -17,35 +17,34 @@ BITDEPTH = 4
 WIDTH_TABLE = 0x33D4D0
 TABLE_SIZE = 0x11A
 
-def extract(input, output):
-    if len(input) <= 0:
-        print('Please enter a valid ELF file path.', file = sys.stderr)
-        return 2
-    try:
-        elf = open(input, 'rb')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
+def extract(fname_elf, fname_font):
+    print("Extracting font image")
+    elf_file = open(fname_elf, 'rb')
+    elf_file.seek(OFFSET)
 
-    elf.seek(OFFSET)
-
-    write_file(elf, WIDTH, HEIGHT, BITDEPTH, output)
+    write_file(elf_file, WIDTH, HEIGHT, BITDEPTH, fname_font)
 
     # Flip image vertically
-    im = Image.open(output)
+    im = Image.open(fname_font)
     im = im.transpose(Image.FLIP_TOP_BOTTOM)
-    im.save(output, format="BMP")
+    im.save(fname_font, format="BMP")
 
-    # subprocess.run(['convert', '-flip', output, output])
+    print("Done")
 
-def rebuild(input, output, variable_width = False):
-    try:
-        elf = open(output, 'rb+')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
+
+def rebuild(fname_font, fname_elf_in, fname_elf_out, variable_width = False):
+    elf_file_out = open(fname_elf_out, 'wb')
     
-    img = Image.open(input)
+    ## Copy the input
+    with open(fname_elf_in, 'rb') as elf_file_in:
+        elf_file_out.write(elf_file_in.read())
+    
+    
+    ########
+    ## Format font image
+    ########
+    print("Processing font image")
+    img = Image.open(fname_font)
     # img = img.transpose(Image.FLIP_TOP_BOTTOM)
     ## Reduce to a 4 bit pallete. Adaptive prevents dithering
     img = img.convert('P', palette=Image.ADAPTIVE, colors=16)
@@ -57,10 +56,8 @@ def rebuild(input, output, variable_width = False):
         print(f'Source file needs to have the dimensions {WIDTH}x{HEIGHT}. Got {width}x{height}')
         return 2
     
-    #####
     ## Palette needs to be in a specific order for alpha transparency to work correctly
-    #####
-    ## Get the palette as a liste of (R,B,G) tuples
+    ## Get the palette as a list of (R,B,G) tuples
     palette = img.getpalette()
     palette_tuples = [(palette[i], palette[i + 1], palette[i + 2]) for i in range(0, len(palette), 3)]
 
@@ -87,10 +84,11 @@ def rebuild(input, output, variable_width = False):
     #####
     ## Write the pallete to file
     #####
-    elf.seek(OFFSET)
+    print("Writing font image")
+    elf_file_out.seek(OFFSET)
 
     for i in range (0, 16):
-        elf.write(struct.pack('<I', ordered[i]))
+        elf_file_out.write(struct.pack('<I', ordered[i]))
 
     #####
     ## Write pixel data
@@ -100,30 +98,25 @@ def rebuild(input, output, variable_width = False):
         left = pixels[i]
         right = pixels[i+1]
         newpixel = (indexed[left] << 4) + indexed[right]
-        elf.write(struct.pack('B', newpixel))
+        elf_file_out.write(struct.pack('B', newpixel))
 
     if variable_width:
-        try:
-            widths_file = open(variable_width, 'r', encoding='utf-8')
-        except IOError as e:
-            print(e, file = sys.stderr)
-            return 2
+        print("Processing variable font widths")
+        widths_file = open(variable_width, 'r', encoding='utf-8')
+        widths_table = json.load(widths_file)
+        widths_data = [0x18] * TABLE_SIZE
 
         table = tbl.TBL(tbl.TBL.PACK)
-
-        widths_table = json.load(widths_file)
-
-        widths_data = [0x18] * TABLE_SIZE
 
         for char in widths_table:
             index = table.pos(char)
             if index >= 0:
                 widths_data[index] = widths_table[char]
 
-        elf.seek(WIDTH_TABLE)
+        elf_file_out.seek(WIDTH_TABLE)
 
         for i in range(0, TABLE_SIZE):
-            elf.write(struct.pack('B', widths_data[i]))
+            elf_file_out.write(struct.pack('B', widths_data[i]))
 
         if not check_bin('armips'):
             print('Font successfully packed, but variable font widths are not installed because armips is not in your path.')
@@ -131,7 +124,9 @@ def rebuild(input, output, variable_width = False):
 
         try:
             vfwpath = os.path.join(basedir, 'vfw.asm')
-            subprocess.check_call(['armips', vfwpath, '-root', os.path.dirname(output)])
+            subprocess.check_call(['armips', vfwpath, '-root', os.path.dirname(fname_elf_in)])
         except subprocess.CalledProcessError:
             print('armips failed to replace variable font width code.')
             return 2
+    
+    print("Done")
