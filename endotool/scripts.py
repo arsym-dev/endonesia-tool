@@ -19,7 +19,7 @@ EXO_ENUM = 'EXO'
 RESERVED = 0x33D600
 EXO_POINTERS     = 0x02C8268
 EXO_POINTERS_END = 0x02F8D50
-ELF_OFFSET = -0x163F000
+ELF_OFFSET = -0x0163F000
 ELF_POINTERS = [
     {
         'pointer': 0x3094C0,
@@ -175,35 +175,20 @@ def extract(elf, exo, output, overwrite = False):
     #######
     ## Extract ELF texts
     #######
-    for i in ELF_POINTERS:
-        elf_pointer = i['pointer']
-        currentpos = elf_pointer
-        currentitem = 0
-        while currentitem*4 < i['size']:
-            elf_file.seek(currentpos)
-            text_pointer = struct.unpack('<I', elf_file.read(4))[0] + ELF_OFFSET
-            currentpos = elf_file.tell()
-            currentitem += 1
+    elf_mgr = ElfTextManager()
+    elf_mgr.readFromFile(elf_file)
 
-            if text_pointer < 0x0 or text_pointer >= elfsize:
-                # not a valid pointer
-                continue
-
-            elf_file.seek(text_pointer)
-            text = jis208.decode(elf_file)
-
-            ## Write output
-            if text:
-                row = [
-                    ELF_ENUM, # FILE
-                    dec2hex(elf_pointer), # ELF Pointer
-                    0, # EXO Block
-                    dec2hex(text_pointer), # Text addr
-                    currentitem-1, # Item num
-                    text, # JP Text
-                    '',# EN Text
-                ]
-                writer.writerow(row)
+    for entry in elf_mgr.text_entries:
+        row = [
+            ELF_ENUM, # FILE
+            dec2hex(entry.elf_address), # ELF Pointer
+            0, # EXO Block
+            dec2hex(entry.text_address), # Text addr
+            entry.item_num, # Item num
+            entry.text, # JP Text
+            '',# EN Text
+        ]
+        writer.writerow(row)
 
     #######
     ## Extract EXO.bin texts
@@ -223,7 +208,7 @@ def extract(elf, exo, output, overwrite = False):
                 EXO_ENUM, # FILE
                 dec2hex(exoblock.elf_address), # ELF Pointer
                 dec2hex(exoblock.exo_address), # EXO Block
-                dec2hex(exoblock.exo_address + entry.offset), # Text addr
+                dec2hex(exoblock.exo_address + entry.text_address), # Text addr
                 entry.item_num, # Item num
                 entry.text, # JP Text
                 '',# EN Text
@@ -236,7 +221,6 @@ def extract(elf, exo, output, overwrite = False):
             writer.writerow([])
 
 def rebuild(input, elf, exo):
-
     try:
         csvfile = open(input, 'r', encoding='utf-8')
     except IOError as e:
@@ -276,14 +260,18 @@ def rebuild(input, elf, exo):
     csvfile.close()
 
     ## Pre-process the CSV data
-    elf_rows = []
+    elf_rows = {}
     exo_rows = {}
     for row in csv_data:
         if len(row)==0:
             continue
 
         if row[0] == ELF_ENUM:
-            elf_rows.append(row)
+            elf_pointer = int(row[1], 16)
+            if elf_pointer in elf_rows:
+                elf_rows[elf_pointer].append(row)
+            else:
+                elf_rows[elf_pointer] = [row]
         elif row[0] == EXO_ENUM:
             elf_pointer = int(row[1], 16)
             if elf_pointer in exo_rows:
@@ -291,40 +279,42 @@ def rebuild(input, elf, exo):
             else:
                 exo_rows[elf_pointer] = [row]
 
-    # ## Process ELF rows
-    # for row in csv_data:
-    #     text = row[3] if not row[4] or row[4] == ' ' else row[4]
-    #     required_size = hex_length(text)
-        
-    #     elf_file.seek(int(row[1], 16))
-    #     available_size = string_size(elf_file)
-    #     if required_size > available_size:
-    #         elf_file.seek(reserved_pointer)
-    #         if not is_empty(elf_file, required_size):
-    #             print('Not enough reserved space left in the ELF file.')
-    #             return 2
-    #         elf_file.seek(int(row[0], 16))
-    #         elf_file.write(struct.pack('<I', reserved_pointer))
-    #         elf_file.seek(reserved_pointer)
-    #         reserved_pointer += required_size + 2
+    #######
+    ## ELF Blocks
+    ## Process EXO rows and add translated text to them
+    #######
+    elf_mgr = ElfTextManager()
+    elf_mgr.readFromFile(elf_file)
 
-    #     size = len(text)
-    #     i = 0
-    #     while i < size:
-    #         char = text[i]
-    #         parse = parse_special_char(text, i)
-    #         pack_format = '>H'
-    #         if parse:
-    #             hex_value = int(parse['address'])
-    #             i += parse['length']
-    #             pack_format = parse['format']
-    #         else:
-    #             hex_value = jis208.convertToHex(char)
-    #             i += 1
-    #         elf_file.write(struct.pack(pack_format, hex_value))
+    for elf_address, rows in elf_rows.items():
+        for row in rows:
+            elf_address = int(row[1], 16)
+            exo_block = int(row[2], 16)
+            text_address = int(row[3], 16)
+            item_num = int(row[4])
+            text_jp = row[5].strip()
+            text_en = row[6].strip()
+
+            found_entry : TextEntry = None
+            for entry in elf_mgr.text_entries:
+                if elf_address == entry.elf_address and item_num == entry.item_num:
+                    found_entry = entry
+                    break
+            if found_entry is None:
+                raise Exception("ELF Entry not found")
+            
+            if text_en != '':
+                found_entry.text = text_en
+                found_entry.transform_ascii = True
+            else:
+                found_entry.text = text_jp
+                found_entry.transform_ascii = False
+    
+    elf_mgr.writeToFile(elf_file)
     
 
     #######
+    ## EXO Blocks
     ## Load up the blocks from the original file and save them as-is, but more compressed
     #######
     blocks = getExoBlocks(elf_file, exo_file)
@@ -339,22 +329,22 @@ def rebuild(input, elf, exo):
             text_jp = row[5].strip()
             text_en = row[6].strip()
 
-            found_block : ExoScriptBlock = None
-            for block in blocks:
-                if elf_pointer == block.elf_address:
-                    found_block = block
+            found_entry : ExoScriptBlock = None
+            for entry in blocks:
+                if elf_pointer == entry.elf_address:
+                    found_entry = entry
                     break
-            if found_block is None:
-                raise Exception("Block not found")
+            if found_entry is None:
+                raise Exception("EXO Block not found")
             
 
-            found_entry : ExoScriptTextEntry = None
-            for entry in block.text_entries:
+            found_entry : TextEntry = None
+            for entry in entry.text_entries:
                 if entry.item_num == item_num:
                     found_entry = entry
                     break
             if found_entry is None:
-                raise Exception("Entry not found")
+                raise Exception("EXO Entry not found")
 
             if text_en != '':
                 found_entry.text = text_en
@@ -367,12 +357,12 @@ def rebuild(input, elf, exo):
     ## Create the final hex blocks
     curr_exo_address = blocks[0].exo_address
 
-    for block in blocks:
-        bin_data = block.toBinary()
+    for entry in blocks:
+        bin_data = entry.toBinary()
 
         ## Adjust the ELF file
-        elf_file.seek(block.elf_address)
-        elf_file.write(struct.pack("<I", block.exo_size))
+        elf_file.seek(entry.elf_address)
+        elf_file.write(struct.pack("<I", entry.exo_size))
         elf_file.write(struct.pack("<I", 0))
         elf_file.write(struct.pack("<I", curr_exo_address))
         elf_file.write(struct.pack("<I", 0))
