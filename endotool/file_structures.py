@@ -254,6 +254,7 @@ class ElfTextManager:
     ]
 
     ## @TODO: Make sure there are no other references to anything in these blocks
+    ## @TODO: There's text at 0x2f8fa8 and below. Seems like item text
     def __init__(self) -> None:
         self.string_blocks : List[ElfTextStringBlock] = [
             ElfTextStringBlock(0x00343410, 0x00348330),

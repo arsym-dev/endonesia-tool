@@ -215,12 +215,12 @@ def rebuild(fname_csv, fname_elf_in, fname_elf_out, fname_exo_in, fname_exo_out)
     csvfile = open(fname_csv, 'r', encoding='utf-8')
 
     # Use the backup ELF as the basis for our new write
-    elf_file_out = open(fname_elf_out, 'rb+')
+    elf_file_out = open(fname_elf_out, 'wb+')
     with open(fname_elf_in, 'rb') as elf_file_in:
         elf_file_out.write(elf_file_in.read())
 
     # Use the backup EXO as the basis for our new write
-    exo_file_out = open(fname_exo_out, 'rb+')
+    exo_file_out = open(fname_exo_out, 'wb+')
     with open(fname_exo_in, 'rb') as exo_file_in:
         exo_file_out.write(exo_file_in.read())
 

@@ -1,9 +1,8 @@
 import subprocess
-import tempfile
 import struct
 import os
-import sys
 import json
+import shutil
 from PIL import Image
 
 from endotool import tbl
@@ -117,14 +116,18 @@ def rebuild(fname_font, fname_elf_in, fname_elf_out, variable_width = False):
 
         for i in range(0, TABLE_SIZE):
             elf_file_out.write(struct.pack('B', widths_data[i]))
+        
+        elf_file_out.close()
 
         if not check_bin('armips'):
             print('Font successfully packed, but variable font widths are not installed because armips is not in your path.')
             return 2
 
         try:
-            vfwpath = os.path.join(basedir, 'vfw.asm')
-            subprocess.check_call(['armips', vfwpath, '-root', os.path.dirname(fname_elf_in)])
+            out_dir = os.path.dirname(fname_elf_out)
+            shutil.copy('vfw.asm', out_dir)
+            # vfwpath = os.path.join(basedir, 'vfw.asm')
+            subprocess.check_call(['armips', 'vfw.asm', '-root', out_dir])
         except subprocess.CalledProcessError:
             print('armips failed to replace variable font width code.')
             return 2
