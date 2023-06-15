@@ -17,6 +17,7 @@ This tool does not provide the ISO for this game. It will not be provided for yo
   - [6. Rebuild ISO](#6-rebuild-iso)
 - [Image Formats](#image-formats)
 - [Text Formats](#text-formats)
+- [Credit](#credit)
 
 ## Requirements
 
@@ -131,3 +132,9 @@ Since the binary data in this game most closely resembles BMP, we will be using 
 ## Text Formats
 
 Text is saved with the EUC-JP encoding.
+
+## Credit
+
+Built on beelzy's repository from GitLab
+
+- https://gitlab.com/beelzy/endonesia-tool
