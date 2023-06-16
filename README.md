@@ -139,9 +139,10 @@ Run `cdvd2iml5.30.msi` and install it. Once it's installed, run it from the star
 <img src="assets/rebuilding_iso.png">
 </p>
 
-1. Use the program to open the file `assets/endonesia.iml`
-2. At the bottom, press "Full Path" and navigate the folder that has the folder with the extracted Endonesia files
-3. Press the "iml2iso" button
+1. Move the files `endonesia.iml` and `endonesia.ims` from the `assets/` folder and put them in your game folder
+2. Use the program to open `endonesia.iml` in your game folder
+3. At the bottom, press "Full Path" and navigate the folder that has the folder with the extracted Endonesia files
+4. Press the "iml2iso" button
 
 Once you've done this, you should have a "endonesia.iso" file that you can use
 
