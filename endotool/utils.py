@@ -5,8 +5,12 @@ basedir = ''
 def read_in_chunks(file_object, chunk_size = 4, size = 0):
     currentsize = 0
     while True:
+        ## Only read new data if we haven't exceeded the size
+        if (size > 0 and size <= currentsize):
+            break
+
         data = file_object.read(chunk_size)
-        if not data or (size > 0 and size <= currentsize):
+        if not data:
             break
         currentsize += chunk_size
         yield data

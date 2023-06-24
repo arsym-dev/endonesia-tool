@@ -5,7 +5,7 @@ import argparse
 import os
 import inspect
 
-from endotool import utils, font, scripts
+from endotool import utils, font, scripts, images
 
 filename = inspect.getframeinfo(inspect.currentframe()).filename
 basedir = os.path.dirname(os.path.abspath(filename))
@@ -189,6 +189,31 @@ script_rebuild_parser.add_argument(
     help = 'Output EXO.BIN assets file to rebuild scripts into.'
     )
 
+#########
+## Font extract
+#########
+image_extract_parser = subparser.add_parser('image-extract',
+    help = 'Extract images from ELF file.'
+    )
+
+image_extract_parser.add_argument(
+    '-x',
+    # '--exofin',
+    required = True,
+    action = 'store',
+    metavar = '[input EXO.BIN]',
+    help = 'exo.bin assets file to extract scripts from.'
+    )
+
+image_extract_parser.add_argument(
+    '-o',
+    # '--output-folder',
+    required = True,
+    action = 'store',
+    metavar = '[output folder]',
+    help = 'directory to dump images into.'
+    )
+
 # try:
 args = parser.parse_args()
 
@@ -218,6 +243,11 @@ elif args.cmd == 'script-rebuild':
         fname_elf_out = args.eo,
         fname_exo_in = args.xi,
         fname_exo_out = args.xo,
+    )
+elif args.cmd == 'image-extract':
+    images.unpack(
+        fname_exo = args.x,
+        dir_output = args.o,
     )
 #     scripts.calculateFreeSpace(args.elf_file, args.exo_bin)
 
