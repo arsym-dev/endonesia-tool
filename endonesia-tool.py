@@ -118,7 +118,7 @@ script_extract_parser.add_argument(
     required = True,
     action = 'store',
     metavar = '[input EXO.BIN]',
-    help = 'exo.bin assets file to extract scripts from.'
+    help = 'EXO.BIN assets file to extract scripts from.'
     )
 
 script_extract_parser.add_argument(
@@ -202,7 +202,7 @@ image_extract_parser.add_argument(
     required = True,
     action = 'store',
     metavar = '[input EXO.BIN]',
-    help = 'exo.bin assets file to extract scripts from.'
+    help = 'EXO.BIN assets file to extract scripts from.'
     )
 
 image_extract_parser.add_argument(
@@ -213,6 +213,32 @@ image_extract_parser.add_argument(
     metavar = '[output folder]',
     help = 'directory to dump images into.'
     )
+
+#########
+## Font extract
+#########
+image_rebuild_parser = subparser.add_parser('image-rebuild',
+    help = 'Rebuilds images and packs them into EXO.BIN'
+    )
+
+image_rebuild_parser.add_argument(
+    '-i',
+    # '--output-folder',
+    required = True,
+    action = 'store',
+    metavar = '[input folder]',
+    help = 'Input directory with images in the format X-X-X.png'
+    )
+
+image_rebuild_parser.add_argument(
+    '-x',
+    # '--exofin',
+    required = True,
+    action = 'store',
+    metavar = '[output EXO.BIN]',
+    help = 'EXO.BIN file to pack images into'
+    )
+
 
 # try:
 args = parser.parse_args()
@@ -248,6 +274,11 @@ elif args.cmd == 'image-extract':
     images.unpack(
         fname_exo = args.x,
         dir_output = args.o,
+    )
+elif args.cmd == 'image-rebuild':
+    images.rebuild(
+        dir_input = args.i,
+        fname_exo = args.x,
     )
 #     scripts.calculateFreeSpace(args.elf_file, args.exo_bin)
 

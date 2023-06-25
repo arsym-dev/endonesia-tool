@@ -1,11 +1,11 @@
 import sys
 import os
-import io
 import struct
-import subprocess
 from PIL import Image
+from glob import glob
 from endotool.utils import read_in_chunks
 from endotool.bmp import write_file
+from endotool.png import convert_indexed_colors_to_png, convert_bitmap_to_png, convert_png_to_8bit_indexed
 
 TEXTURE_END = 0x04a89800
 PALETTE_SIZE = 0x400
@@ -29,8 +29,8 @@ def unpack(fname_exo : str, dir_output : str):
         print('Output is not a folder.')
         return 2
 
-    pos = 0 # 0x005A9000
-    while exo.tell() < TEXTURE_END:
+    pos = 0 #0x048BC800
+    while pos < TEXTURE_END:
         try:
             exo.seek(pos)
 
@@ -57,71 +57,20 @@ def unpack(fname_exo : str, dir_output : str):
                 height = struct.unpack('<I', exo.read(4))[0]
             exo.seek(pos + offset_to_start_of_data)
 
-            bmpfile = os.path.join(dir_output, f'{pos:08X}' + '.bmp')
-            print(f"Processing {bmpfile}")
+            pngfile = os.path.join(dir_output, f'{pos/2048:08.0f}-{pos:08X}-{bitdepth:02d}' + '.png')
+            print(f"Processing {pngfile}")
             # 8-bit indexed images are in BGRA format
             if bitdepth == 8:
-                data = io.BytesIO()
-                for piece in read_in_chunks(exo, size = PALETTE_SIZE + width * height):
-                    index = exo.tell() - pos - offset_to_start_of_data
-                    if index < PALETTE_SIZE:
-                        # color = struct.unpack('>I', piece)[0]
-                        # r = color >> 0x18 & 0xFF
-                        # g = color >> 0x10 & 0xFF
-                        # b = color >> 0x8 & 0xFF
-                        # a = color & 0xFF
-                        # color = b << 0x18 | g << 0x10 | r << 0x8 | a
-                        # palettepos = data.tell()
-                        # # swap palette order
-                        # # swapindex = (((index - 4) / 4) + 24) % 32
-                        # # if swapindex < 16:
-                        # #     swap = 8 * 4 if swapindex < 8 else -8 * 4
-                        # #     data.seek(swap, 1)
-                        # data.write(struct.pack('>I', color))
-                        # data.seek(palettepos + 4)
-
-                        r, g, b, a = struct.unpack('BBBB', piece)
-                        if a == 0x80:
-                            a = 0xFF
-                        else:
-                            a = a*2
-
-                        palettepos = data.tell()
-                        # swap palette order
-                        # swapindex = (((index - 4) / 4) + 24) % 32
-                        # if swapindex < 16:
-                        #     swap = 8 * 4 if swapindex < 8 else -8 * 4
-                        #     data.seek(swap, 1)
-                        data.write(struct.pack('BBBB', b, g, r, a))
-                        data.seek(palettepos + 4)
-                        
-                    else:
-                        data.write(piece)
-
-                data.seek(0)
-                write_file(data, width, height, bitdepth, bmpfile)
-                # write_file(data = data, width = width, height = height, bitdepth = bitdepth, output = bmpfile)
-
-                # Flip image vertically
-                # im = Image.open(bmpfile)
-                # im = im.transpose(Image.FLIP_TOP_BOTTOM)
-                # im.save(bmpfile, format="BMP")
-                # subprocess.run(['convert', '-flip', bmpfile, bmpfile])
+                palette = exo.read(PALETTE_SIZE)
+                indices = exo.read(width * height)
+                convert_indexed_colors_to_png(width, height, list(palette), list(indices), pngfile)
 
             elif bitdepth == 24:
-                write_file(data = exo, width = width, height = height, bitdepth = 32, output = bmpfile)
-
+                data = []
+                for piece in read_in_chunks(exo, size = width * height * 4):
+                    data.append(struct.unpack('BBBB', piece))
                 
-                im = Image.open(bmpfile)
-                # BGR -> RGB
-                b, g, r, a = im.split() 
-                im = Image.merge("RGBA", (r, g, b, a))
-                # Flip image vertically
-                im = im.transpose(Image.FLIP_TOP_BOTTOM)
-                im.save(bmpfile, format="BMP")
-
-                # subprocess.run(['convert', bmpfile, '-separate', '-swap', '0,2', '-combine', '-flip', bmpfile])
-            
+                convert_bitmap_to_png(width, height, data, pngfile)
             else:
                 raise Exception(f"Unsupported bitdepth: {bitdepth}")
             
@@ -132,6 +81,20 @@ def unpack(fname_exo : str, dir_output : str):
                 pos = exo.tell()
             else:
                 pos = (int(exo.tell() / 2048)+1)*2048
+            
+            if pos == 0x01A60800:
+                pos = 0x01A61000
+            if pos == 0x0364A000:
+                pos = 0x0364A800
 
         except Exception as e:
             pass
+
+def rebuild(dir_input : str, fname_exo: str):
+    for path in glob(os.path.join(dir_input, '*-*-*.png')):
+        block_idx, offset, bitdepth = os.path.basename(path).split('.')[0].split('-')
+        offset = int(offset, 16)
+        bitdepth = int(bitdepth)
+
+        convert_png_to_8bit_indexed(fname_exo)
+        pass
