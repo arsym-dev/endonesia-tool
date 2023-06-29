@@ -53,5 +53,14 @@ def convert_png_to_8bit_indexed(fname):
     indexed_image = rgba_image.convert("P", palette=Image.ADAPTIVE, colors=256)
 
     data = indexed_image.getdata()
-    palette = indexed_image.getpalette()
-    pass
+    palette = indexed_image.getpalette('RGBA')
+    swap_palette(palette)
+
+    ## Convert alpha to half-byte
+    for i in range(3, len(palette), 4):
+        if palette[i] == 0xFF:
+            palette[i] = 0x80
+        else:
+            palette[i] = palette[i] >> 1
+    
+    return bytes(palette) + bytes(data)

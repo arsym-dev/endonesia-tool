@@ -57,7 +57,7 @@ def unpack(fname_exo : str, dir_output : str):
                 height = struct.unpack('<I', exo.read(4))[0]
             exo.seek(pos + offset_to_start_of_data)
 
-            pngfile = os.path.join(dir_output, f'{pos/2048:08.0f}-{pos:08X}-{bitdepth:02d}' + '.png')
+            pngfile = os.path.join(dir_output, f'{pos/2048:05.0f}-{pos + offset_to_start_of_data:08X}-{bitdepth:02d}' + '.png')
             print(f"Processing {pngfile}")
             # 8-bit indexed images are in BGRA format
             if bitdepth == 8:
@@ -91,10 +91,27 @@ def unpack(fname_exo : str, dir_output : str):
             pass
 
 def rebuild(dir_input : str, fname_exo: str):
+    try:
+        exo = open(fname_exo, 'rb+')
+    except IOError as e:
+        print(e, file = sys.stderr)
+        return 2
+    
     for path in glob(os.path.join(dir_input, '*-*-*.png')):
         block_idx, offset, bitdepth = os.path.basename(path).split('.')[0].split('-')
         offset = int(offset, 16)
         bitdepth = int(bitdepth)
 
-        convert_png_to_8bit_indexed(fname_exo)
-        pass
+        print(f"Packing {path}")
+        if bitdepth == 8:
+            data = convert_png_to_8bit_indexed(path)
+            exo.seek(offset)
+            exo.write(data)
+            print("Complete")
+        else:
+            raise Exception("Not implemented")
+
+        
+        
+
+    exo.close()
