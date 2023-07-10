@@ -8,7 +8,7 @@ import math
 
 from endotool import jis208
 from endotool.utils import pad_to_nearest
-from endotool.file_structures import *
+from endotool.file_structures.text import *
 
 CSV_DELIMETER = '|'
 CSV_ESCAPECHAR = '\\'
