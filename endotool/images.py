@@ -1,7 +1,7 @@
 import sys
 import os
 import struct
-import yaml
+import json
 from PIL import Image
 from glob import glob
 from endotool.utils import read_in_chunks
@@ -39,7 +39,7 @@ def unpack(fname_exo : str, dir_output : str):
         sectionsize = struct.unpack('<I', exo.read(4))[0]
         if sectionsize == 0:
             raise Exception("Invalid value")
-        
+
         offset_to_start_of_data = struct.unpack('<I', exo.read(4))[0]
 
         # Some of these values are just not provided
@@ -60,7 +60,7 @@ def unpack(fname_exo : str, dir_output : str):
             height = struct.unpack('<I', exo.read(4))[0]
 
         png_fname = os.path.join(dir_output, f'{pos/2048:05.0f}-{pos + offset_to_start_of_data:08X}-{bitdepth:02d}' + '.png')
-        yaml_fname = os.path.join(dir_output, f'{pos/2048:05.0f}-{pos + offset_to_start_of_data:08X}-{bitdepth:02d}' + '.yaml')
+        json_fname = os.path.join(dir_output, f'{pos/2048:05.0f}-{pos + offset_to_start_of_data:08X}-{bitdepth:02d}' + '.json')
         print(f"Processing {png_fname}")
 
         ## Image data
@@ -69,11 +69,12 @@ def unpack(fname_exo : str, dir_output : str):
         info.from_buffer(exo)
         ser = info.serialize()
 
-        with open(yaml_fname, 'w') as file:
-            yaml.dump(ser, file, sort_keys=False)
+        with open(json_fname, 'w') as file:
+            # yaml.dump(ser, file, sort_keys=False)
+            file.write(json.dumps(ser, indent=4))
 
         exo.seek(pos + offset_to_start_of_data)
-        
+
         # 8-bit indexed images are in BGRA format
         if bitdepth == 8:
             palette = exo.read(PALETTE_SIZE)
@@ -84,12 +85,12 @@ def unpack(fname_exo : str, dir_output : str):
             data = []
             for piece in read_in_chunks(exo, size = width * height * 4):
                 data.append(struct.unpack('BBBB', piece))
-            
+
             convert_bitmap_to_png(width, height, data, png_fname)
 
         else:
             raise Exception(f"Unsupported bitdepth: {bitdepth}")
-        
+
         print(f"Complete")
 
         # Align position to the next nearest block
@@ -97,12 +98,12 @@ def unpack(fname_exo : str, dir_output : str):
             pos = exo.tell()
         else:
             pos = (int(exo.tell() / 2048)+1)*2048
-        
+
         if pos == 0x01A60800:
             pos = 0x01A61000
         if pos == 0x0364A000:
             pos = 0x0364A800
-    
+
     print(H3_un3_values)
 
 def rebuild(dir_input : str, fname_exo: str):
@@ -111,7 +112,7 @@ def rebuild(dir_input : str, fname_exo: str):
     except IOError as e:
         print(e, file = sys.stderr)
         return 2
-    
+
     for path in glob(os.path.join(dir_input, '*-*-*.png')):
         block_idx, offset, bitdepth = os.path.basename(path).split('.')[0].split('-')
         offset = int(offset, 16)
@@ -126,7 +127,7 @@ def rebuild(dir_input : str, fname_exo: str):
         else:
             raise Exception("Not implemented")
 
-        
-        
+
+
 
     exo.close()
