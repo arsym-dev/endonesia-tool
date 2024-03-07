@@ -54,8 +54,8 @@ class DataManager(PackedImageInfo):
         img = self.full_image.crop((specs.crop_rect.left, specs.crop_rect.top, specs.crop_rect.right, specs.crop_rect.bottom))
         img = img.resize(
             (
-                int(img.width*specs.scale.x/100.0),
-                int(img.height*specs.scale.y/100.0)
+                max(1, int(img.width*specs.scale.x/100.0)),
+                max(1, int(img.height*specs.scale.y/100.0))
             ),
             Image.LANCZOS)
         img = img.rotate(specs.rotation)
@@ -136,13 +136,13 @@ class ApplicationUI(tk.Tk):
         #######################
         ## TABS
         #######################
-        notebook = ttk.Notebook(main_frames[0])
-        frame_tab_animations = ttk.Frame(notebook)
-        frame_tab_framedata = ttk.Frame(notebook)
-        notebook.add(frame_tab_animations, text='Animations')
-        notebook.add(frame_tab_framedata, text='Frames')
-        notebook.pack(side='left', expand=True, fill='both')
-        # notebook.grid(column=0, row=0, sticky="nw")
+        self.notebook = ttk.Notebook(main_frames[0])
+        frame_tab_animations = ttk.Frame(self.notebook)
+        frame_tab_framedata = ttk.Frame(self.notebook)
+        self.notebook.add(frame_tab_animations, text='Animations')
+        self.notebook.add(frame_tab_framedata, text='Frames')
+        self.notebook.pack(side='left', expand=True, fill='both')
+        # self.notebook.grid(column=0, row=0, sticky="nw")
 
 
         #######################
@@ -204,7 +204,7 @@ class ApplicationUI(tk.Tk):
                 width=10,
                 font=("Helvatica", 12),
                 textvariable=self.var_frame_timing_data_num,
-                command=self.on_change_spinbox_frame_timing_data_num,
+                command=self.update_data_typed, #self.on_change_spinbox_frame_timing_data_num,
             )
         self.spinboxes_frame_timing_data_duration = tk.Spinbox(
                 bottom_frame,
@@ -213,7 +213,7 @@ class ApplicationUI(tk.Tk):
                 width=10,
                 font=("Helvatica", 12),
                 textvariable=self.var_frame_timing_data_duration,
-                command=self.on_change_spinbox_animation,
+                command=self.update_data_typed, #self.on_change_spinbox_animation,
             )
 
         tk.Label(bottom_frame, text="Frame Num").grid(column=0, row=0, sticky='w')
@@ -584,14 +584,31 @@ class ApplicationUI(tk.Tk):
         ###################
         ## FRAME TIMING
         ###################
-        frame_timing_data = self.dmgr.selected_frame_timing_data
+        index = self.frame_timing_data_listbox.curselection()[0]
+        frame_num = self.var_frame_timing_data_num.get()
+        duration = self.var_frame_timing_data_duration.get()
 
-        frame_timing_data.frame_duration = self.var_frame_timing_data_duration.get()
-        frame_timing_data.frame_num = self.var_frame_timing_data_num.get()
+        ## Update animation frame with spinbox values
+        frame_timing_data = self.dmgr.selected_frame_timing_data
+        frame_timing_data.frame_duration = duration
+        frame_timing_data.frame_num = frame_num
 
         ## We got here by pressing enter, update the image
         if event is not None:
-            self.create_image_for_canvas(self.canvas)
+
+            if self.notebook.index(self.notebook.select()) == 0:
+                ## On the animation tab, use the frame_num
+
+                ## Update the listbox info
+                self.frame_timing_data_listbox.delete(index)
+                self.frame_timing_data_listbox.insert(index, frame_num)
+                self.frame_timing_data_listbox.select_set(index)
+                self.on_frame_timing_data_select(should_stop_animation=False)
+
+                self.create_image_for_canvas(self.canvas, frame_num)
+            else:
+                ## If on the frames tab, just use the current frame
+                self.create_image_for_canvas(self.canvas)
 
         # self.update_framedata_preview()
 
