@@ -41,10 +41,9 @@ def unpack(fname_exo : str, dir_output : str):
             raise Exception("Invalid value")
 
         offset_to_start_of_data = struct.unpack('<I', exo.read(4))[0]
-
-        # Some of these values are just not provided
         exo.seek(pos + offset_to_start_of_data)
 
+        # Some of these values are just not provided
         if pos in UNKNOWN_SIZES:
             width = UNKNOWN_SIZES[pos]['width']
             height = UNKNOWN_SIZES[pos]['height']
@@ -63,15 +62,7 @@ def unpack(fname_exo : str, dir_output : str):
         json_fname = os.path.join(dir_output, f'{pos/2048:05.0f}-{pos + offset_to_start_of_data:08X}-{bitdepth:02d}' + '.json')
         print(f"Processing {png_fname}")
 
-        ## Image data
-        exo.seek(pos)
-        info = PackedImageInfo()
-        info.from_buffer(exo)
-        ser = info.serialize()
-
-        with open(json_fname, 'w') as file:
-            # yaml.dump(ser, file, sort_keys=False)
-            file.write(json.dumps(ser, indent=4))
+        ## IMAGE PIXEL DATA
 
         exo.seek(pos + offset_to_start_of_data)
 
@@ -91,18 +82,33 @@ def unpack(fname_exo : str, dir_output : str):
         else:
             raise Exception(f"Unsupported bitdepth: {bitdepth}")
 
-        print(f"Complete")
+        print(f"Wrote PNG")
 
         # Align position to the next nearest block
         if (exo.tell() % 2048) == 0:
-            pos = exo.tell()
+            next_pos = exo.tell()
         else:
-            pos = (int(exo.tell() / 2048)+1)*2048
+            next_pos = (int(exo.tell() / 2048)+1)*2048
 
-        if pos == 0x01A60800:
-            pos = 0x01A61000
-        if pos == 0x0364A000:
-            pos = 0x0364A800
+        if next_pos == 0x01A60800:
+            next_pos = 0x01A61000
+        if next_pos == 0x0364A000:
+            next_pos = 0x0364A800
+
+        ## IMAGE METADATA
+        exo.seek(pos)
+        info = PackedImageInfo()
+        info.from_buffer(exo)
+        ser = info.serialize()
+
+        with open(json_fname, 'w') as file:
+            # yaml.dump(ser, file, sort_keys=False)
+            file.write(json.dumps(ser, indent=4))
+
+        print(f"Wrote JSON")
+
+        ## FINALIZE LOOP
+        pos = next_pos
 
     print(H3_un3_values)
 
