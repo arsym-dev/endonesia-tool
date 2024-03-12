@@ -23,7 +23,23 @@ def readInt16(data, offset):
 def readInt32(data, offset):
     return struct.unpack('<i', data[offset:offset+4])[0]
 
-H3_un3_values = []
+def createUInt8(value):
+    return struct.pack('<B', value)
+
+def createUInt16(value):
+    return struct.pack('<H', value)
+
+def createUInt32(value):
+    return struct.pack('<I', value)
+
+def createInt8(value):
+    return struct.pack('<b', value)
+
+def createInt16(value):
+    return struct.pack('<h', value)
+
+def createInt32(value):
+    return struct.pack('<i', value)
 
 class PackedImageInfo:
     def __init__(self) -> None:
@@ -32,37 +48,49 @@ class PackedImageInfo:
         self.frame_image_data: List[FrameImageData] = []
         self.bitdepth: int = 0
         self.raw_data: bytes = b''
+        self.image_width: int = 0
+        self.image_height: int = 0
+
+        self.offset_start: int = 0
+        self.img_data_offset_qqq: int = 0
+        self.offset_to_frames_header: int = 0
+        self.offset_to_animations_header: int = 0
+        self.offset_to_image: int = 0
+        self.offset_to_frame_data: int = 0
+        self.bits: int = 16
 
     def from_buffer(self, buffer: BufferedReader) -> None:
-        offset_start = buffer.tell()
-        header_size = struct.unpack('<I', buffer.read(4))[0]
+        self.offset_start = buffer.tell()
+        self.header_size = struct.unpack('<I', buffer.read(4))[0]
         buffer.seek(-4, 1)
-        data = buffer.read(header_size + 0x30)
+        data = buffer.read(self.header_size + 0x30)
         self.raw_data = data
 
-        header_size = readUInt32(data, 0)
-        img_data_offset_qqq = readUInt32(data, 4)
+        self.header_size = readUInt32(data, 0)
+        self.img_data_offset_qqq = readUInt32(data, 4)
+        if readUInt32(data, 8) + readUInt32(data, 12) == 0:
+            self.bits = 32
+        else:
+            self.bits = 16
 
-        num_frames = readUInt16(data, header_size + 0x00)
-        num_animations_16bit = readUInt16(data, header_size + 0x02)
+        num_frames = readUInt16(data, self.header_size + 0x00)
+        num_animations_16bit = readUInt16(data, self.header_size + 0x02)
         if num_animations_16bit > 0:
             num_animations_32bit = 0
-            offset_to_frames_header = readUInt32(data, header_size + 0x04)
-            offset_to_animations_header = readUInt32(data, header_size + 0x08)
-            offset_to_image = readUInt32(data, header_size + 0x0C)
-            img_width = readUInt32(data, header_size + 0x10)
-            img_height = readUInt32(data, header_size + 0x14)
-            bitdepth = readUInt32(data, header_size + 0x18)
+            self.offset_to_frames_header = readUInt32(data, self.header_size + 0x04)
+            self.offset_to_animations_header = readUInt32(data, self.header_size + 0x08)
+            self.offset_to_image = readUInt32(data, self.header_size + 0x0C)
+            self.image_width = readUInt32(data, self.header_size + 0x10)
+            self.image_height = readUInt32(data, self.header_size + 0x14)
+            self.bitdepth = readUInt32(data, self.header_size + 0x18)
         else:
-            num_animations_32bit = readUInt32(data, header_size + 0x04) # I have no idea why they do this, it's the dumbest thing ever
-            offset_to_frames_header = readUInt32(data, header_size + 4 + 0x04)
-            offset_to_animations_header = readUInt32(data, header_size + 4 + 0x08)
-            offset_to_image = readUInt32(data, header_size + 4 + 0x0C)
-            img_width = readUInt32(data, header_size + 4 + 0x10)
-            img_height = readUInt32(data, header_size + 4 + 0x14)
-            bitdepth = readUInt32(data, header_size + 4 + 0x18)
-
-        self.bitdepth = bitdepth
+            num_animations_32bit = readUInt32(data, self.header_size + 0x04) # I have no idea why they do this, it's the dumbest thing ever
+            self.offset_to_frames_header = readUInt32(data, self.header_size + 4 + 0x04)
+            self.offset_to_animations_header = readUInt32(data, self.header_size + 4 + 0x08)
+            self.offset_to_image = readUInt32(data, self.header_size + 4 + 0x0C)
+            self.image_width = readUInt32(data, self.header_size + 4 + 0x10)
+            self.image_height = readUInt32(data, self.header_size + 4 + 0x14)
+            self.bitdepth = readUInt32(data, self.header_size + 4 + 0x18)
 
         # header_size_img_specs = offset_to_frames_header - 8
         # header_size_frames = offset_to_animations_header - offset_to_frames_header
@@ -72,11 +100,11 @@ class PackedImageInfo:
         for i_f in range(num_frames):
             self.frame_image_data.append(FrameImageData())
             fid = self.frame_image_data[-1]
-            fid.count = readUInt32(data, offset_to_frames_header + i_f*8 + 0x00)
+            fid.count = readUInt32(data, self.offset_to_frames_header + i_f*8 + 0x00)
             fid.frame_num = i_f
 
-            offset_to_img_spec = readUInt32(data, offset_to_frames_header + i_f*8 + 0x04)
-            size_of_img_spec = 32*fid.count + 4*int((fid.count + 3)/4)
+            offset_to_img_spec = readUInt32(data, self.offset_to_frames_header + i_f*8 + 0x04)
+            size_of_img_spec = 32*fid.count + 8*int((fid.count + 3)/4)
 
             ## Create ImageSpecifications
             fid.img_specs = ImageSpecifications()
@@ -101,32 +129,41 @@ class PackedImageInfo:
             )
             img_spec.unknown_remaining = data[offset_to_img_spec + 0x18 : offset_to_img_spec + size_of_img_spec]
 
+        self.offset_to_frame_data = readUInt32(data, self.offset_to_animations_header + 0x04)
+
         for i_a in range(num_animations_16bit + num_animations_32bit):
-            offset_animation = offset_to_animations_header + i_a*16
+            offset_animation = self.offset_to_animations_header + i_a*16
             self.animations.append(Animation())
-            ani = self.animations[-1]
-            num_frames = readUInt16(data, offset_animation + 0x00)
-            ani.animation_duration = readUInt16(data, offset_animation + 0x02)
+            anim = self.animations[-1]
+            num_aniframes = readUInt16(data, offset_animation + 0x00)
+            anim.animation_duration = readUInt16(data, offset_animation + 0x02)
             offset_to_frame_data = readUInt32(data, offset_animation + 0x04)
-            H3_un3 = readUInt32(data, offset_animation + 0x08)
-            H3_offset_to_H3T3 = readUInt32(data, offset_animation + 0x0C)
+            num_unknown_transforms = readUInt32(data, offset_animation + 0x08)
+            offset_to_transform = readUInt32(data, offset_animation + 0x0C)
+            unknown_transforms = []
 
-            # if (H3_un3 != 0 or H3_offset_to_H3T3 != 0):
-            if (H3_un3 != 0  and H3_un3 not in H3_un3_values):
-                H3_un3_values.append(H3_un3)
-                pass ## TODO: Implement
-                ## raise Exception("Not implemented")
+            for idx in range(num_unknown_transforms):
+                ## I'm not entirely sure what this section is. Each frame is 4 points that can be positive or negative values.
+                ## If I had to guess, it's probably some kind of transform like shearing to give images a "swaying" animation
+                tf = Vector4(
+                    readInt16(data, offset_to_transform + idx*8 + 0x00),
+                    readInt16(data, offset_to_transform + idx*8 + 0x02),
+                    readInt16(data, offset_to_transform + idx*8 + 0x04),
+                    readInt16(data, offset_to_transform + idx*8 + 0x06),
+                )
+                unknown_transforms.append(tf)
 
-            for i_ftd in range(num_frames):
+
+            for i_ftd in range(num_aniframes):
                 if num_animations_16bit > 0:
                     ## 16 bit values
-                    frame_num = readUInt16(data, offset_to_frame_data + i_ftd*4 + 0x00)
+                    frame_num = readInt16(data, offset_to_frame_data + i_ftd*4 + 0x00)
                     frame_duration = readUInt16(data, offset_to_frame_data + i_ftd*4 + 0x02)
                     bits = 16
                 else:
                     ## 32 bit values
-                    frame_num = readUInt32(data, offset_to_frame_data + i_ftd*8 + 0x00)
-                    frame_duration = readUInt16(data, offset_to_frame_data + i_ftd*8 + 0x02)
+                    frame_num = readInt32(data, offset_to_frame_data + i_ftd*8 + 0x00)
+                    frame_duration = readUInt32(data, offset_to_frame_data + i_ftd*8 + 0x04)
                     bits = 32
 
                 # if frame_num == 0xFFFF:
@@ -139,14 +176,13 @@ class PackedImageInfo:
                 #     frame_timing_data = ani.frame_timing_data[-1]
                 #     frame_timing_data.frame_duration = frame_duration
                 #     frame_timing_data.frame_num = frame_num # self.frame_image_data[frame_num]
-                #     frame_timing_data.bits = bits
                 #     self.frame_image_data[frame_num].accessed += 1
 
-                ani.frame_timing_data.append(FrameTimingData())
-                frame_timing_data = ani.frame_timing_data[-1]
+                anim.frame_timing_data.append(FrameTimingData())
+                frame_timing_data = anim.frame_timing_data[-1]
                 frame_timing_data.frame_duration = frame_duration
                 frame_timing_data.frame_num = frame_num # self.frame_image_data[frame_num]
-                frame_timing_data.bits = bits
+                frame_timing_data.unknown_transforms = unknown_transforms
 
                 if frame_num == 0xFFFF:
                     ## I have no idea why this happens but it does. Frame_num is -1, so no image loaded
@@ -154,14 +190,194 @@ class PackedImageInfo:
                 else:
                     self.frame_image_data[frame_num].accessed += 1
 
+    def rebuild(self) -> bytes:
+        final_output = bytes()
+
+        final_output += createUInt32(self.header_size)
+        final_output += createUInt32(self.img_data_offset_qqq)
+        if self.bits == 32:
+            final_output += createInt32(0)
+            final_output += createInt32(0)
+
+        ############
+        ## Pack the frame data bytes
+        ############
+        byte_list_img_specs: List[bytes] = []
+
+        for fid in self.frame_image_data:
+            temp_bytes = bytes()
+            specs: ImageSpecifications = fid.img_specs
+            temp_bytes += createInt16(specs.unknown1)
+            temp_bytes += createInt16(specs.unknown2)
+            temp_bytes += createInt16(specs.unknown3)
+            temp_bytes += createInt16(specs.crop_rect.left)
+            temp_bytes += createInt16(specs.crop_rect.top)
+            temp_bytes += createInt16(specs.crop_rect.right)
+            temp_bytes += createInt16(specs.crop_rect.bottom)
+            temp_bytes += createInt16(specs.offset.x)
+            temp_bytes += createInt16(specs.offset.y)
+            temp_bytes += createInt16(specs.rotation)
+            temp_bytes += createInt16(specs.scale.x)
+            temp_bytes += createInt16(specs.scale.y)
+            temp_bytes += specs.unknown_remaining
+
+            if self.bits == 32:
+                bytes_to_add = 16 - len(temp_bytes)%16
+                if bytes_to_add != 16:
+                    temp_bytes += b'\x00'*bytes_to_add
+
+            byte_list_img_specs.append(temp_bytes)
+
+        for b in byte_list_img_specs:
+            final_output += b
+
+        ############
+        ## Second Header
+        ############
+        output_second_header = bytes()
+        if self.bits == 16:
+            offset = 0x08
+        else:
+            offset = 0x10
+
+        for idx, fid in enumerate(self.frame_image_data):
+            output_second_header += createInt32(fid.count)
+            output_second_header += createInt32(offset)
+            offset += len(byte_list_img_specs[idx])
+
+        if self.bits == 32:
+            bytes_to_add = 16 - len(output_second_header)%16
+            if bytes_to_add != 16:
+                output_second_header += b'\x00'*bytes_to_add
+
+        final_output += output_second_header
+
+        ############
+        ## Animation timing data
+        ############
+
+        byte_list_frame_timing_data: List[bytes] = []
+        byte_list_unknown_transforms: List[bytes] = []
+        for idx_anim, anim in enumerate(self.animations):
+            temp_bytes_timing = bytes()
+            if self.bits == 16:
+                for idx_ftd, ftd in enumerate(anim.frame_timing_data):
+                    temp_bytes_timing += createInt16(ftd.frame_num)
+                    temp_bytes_timing += createInt16(ftd.frame_duration)
+
+                if len(anim.frame_timing_data)%2 == 1:
+                    ## Pad so it's 16 bits long
+                    temp_bytes_timing += createInt32(0)
+            else:
+                for idx_ftd, ftd in enumerate(anim.frame_timing_data):
+                    temp_bytes_timing += createInt32(ftd.frame_num)
+                    temp_bytes_timing += createInt32(ftd.frame_duration)
+
+                if len(anim.frame_timing_data)%2 == 1:
+                    ## Pad so it's 32 bits long
+                    temp_bytes_timing += createInt32(0) + createInt32(0)
+
+            byte_list_frame_timing_data.append(temp_bytes_timing)
+
+            temp_bytes_transform = bytes()
+            for idx_ftd, ftd in enumerate(anim.frame_timing_data):
+                for ut in ftd.unknown_transforms:
+                    temp_bytes_transform += createInt16(ut.x) + createInt16(ut.y) + createInt16(ut.z) + createInt16(ut.w)
+            if len(temp_bytes_transform) > 0:
+                byte_list_unknown_transforms.append(temp_bytes_transform)
+
+        offset_unknown_transforms = len(output_second_header) #sum([len(x) for x in byte_list_frame_timing_data])
+
+        for b in byte_list_frame_timing_data:
+            offset_unknown_transforms += len(b)
+            final_output += b
+        for b in byte_list_unknown_transforms:
+            final_output += b
+
+        ############
+        ## Animations data
+        ############
+        offset_frame_timing_data = 0
+
+        idx_ut = 0
+        for idx_anim, anim in enumerate(self.animations):
+            final_output += createInt16(len(anim.frame_timing_data))
+            final_output += createInt16(anim.animation_duration)
+            final_output += createInt32(self.offset_to_frame_data + offset_frame_timing_data)
+
+            if self.bits == 16:
+                offset_frame_timing_data += 0x08 * int((len(anim.frame_timing_data)+1)/2)
+            else:
+                offset_frame_timing_data += 0x10 * int((len(anim.frame_timing_data)+1)/2)
+
+            ## Handle Unknown transform
+            num_ut = 0
+            for idx_ftd, ftd in enumerate(anim.frame_timing_data):
+                num_ut += len(ftd.unknown_transforms)
+
+            final_output += createInt32(num_ut)
+            if num_ut == 0:
+                final_output += createInt32(0)
+            else:
+                final_output += createInt32(self.offset_to_frames_header + offset_unknown_transforms)
+                ut = byte_list_frame_timing_data[idx_ut]
+                offset_unknown_transforms += len(ut)
+                idx_ut += 1
+
+        num_frames = createInt16(len(self.frame_image_data))
+        if self.bits == 16:
+            num_animations = createInt16(len(self.animations))
+        else:
+            num_animations = createInt16(0) + createInt32(len(self.animations))
+
+        final_output += createInt16(len(self.frame_image_data))
+        final_output += num_animations
+        final_output += createInt32(self.offset_to_frames_header) #Offset to frame headers
+        final_output += createInt32(self.offset_to_animations_header) #Offset to displayable headers
+        final_output += createInt32(self.offset_to_image) #Offset to img data
+        final_output += createUInt32(self.image_width)
+        final_output += createUInt32(self.image_height)
+        final_output += createUInt32(self.bitdepth)
+
+        return final_output
+
+        ## TODO: Pad zeros
+        ## TODO: Write image data
+
 
     def serialize(self):
         return {
+            'header_size': self.header_size,
+            'header_offset': {
+                'offset_start': self.offset_start,
+                'img_data_offset_qqq': self.img_data_offset_qqq,
+                'offset_to_frames_header': self.offset_to_frames_header,
+                'offset_to_animations_header': self.offset_to_animations_header,
+                'offset_to_image': self.offset_to_image,
+                'offset_to_frame_data': self.offset_to_frame_data,
+            },
+            'bits': self.bits,
+            'bitdepth': self.bitdepth,
+            'width': self.image_width,
+            'height': self.image_height,
             'frame_image_data': [fid.serialize() for fid in self.frame_image_data],
             'animations': [a.serialize() for a in self.animations]
         }
 
+
     def deserialize(self, data):
+        self.header_size = data['header_size']
+        self.offset_start = data['header_offset']['offset_start']
+        self.img_data_offset_qqq = data['header_offset']['img_data_offset_qqq']
+        self.offset_to_frames_header = data['header_offset']['offset_to_frames_header']
+        self.offset_to_animations_header = data['header_offset']['offset_to_animations_header']
+        self.offset_to_image = data['header_offset']['offset_to_image']
+        self.offset_to_frame_data = data['header_offset']['offset_to_frame_data']
+        self.bits = data['bits']
+        self.image_width = data['width']
+        self.image_height = data['height']
+        self.bitdepth = data['bitdepth']
+
         self.frame_image_data = []
         for datum in data['frame_image_data']:
             self.frame_image_data.append(FrameImageData())
@@ -179,7 +395,7 @@ class Animation:
         self.frame_timing_data: List['FrameTimingData'] = []
 
     def serialize(self):
-        self.animation_duration = sum([ftd.frame_duration for ftd in self.frame_timing_data])
+        # self.animation_duration = sum([ftd.frame_duration for ftd in self.frame_timing_data])
         return {
             'animation_duration': self.animation_duration,
             'frame_timing_data': [ftd.serialize() for ftd in self.frame_timing_data]
@@ -197,19 +413,26 @@ class FrameTimingData:
     def __init__(self) -> None:
         self.frame_num: int
         self.frame_duration: int
-        self.bits: int
+        self.unknown_transforms: List[Vector4] = []
 
     def serialize(self):
-        return {
+        rv = {
             'frame_num': self.frame_num,
             'frame_duration': self.frame_duration,
-            'bits': self.bits,
         }
+        if len(self.unknown_transforms) > 0:
+            rv['unknown_transforms'] = [ut.serialize() for ut in self.unknown_transforms]
+
+        return rv
 
     def deserialize(self, data):
         self.frame_num = data['frame_num']
         self.frame_duration = data['frame_duration']
-        self.bits = data['bits']
+        self.unknown_transforms = []
+        if 'unknown_transforms' in data:
+            for datum in data['unknown_transforms']:
+                self.unknown_transforms.append(Vector4())
+                self.unknown_transforms[-1].deserialize(datum)
 
 
 class FrameImageData:
@@ -305,3 +528,17 @@ class Vector2:
     def deserialize(self, data):
         self.x = data['x']
         self.y = data['y']
+
+
+class Vector4:
+    def __init__(self, x: int = 0, y: int = 0, z: int = 0, w: int = 0, ) -> None:
+        self.x = x
+        self.y = y
+        self.z = z
+        self.w = w
+
+    def serialize(self):
+        return [self.x, self.y, self.z, self.w]
+
+    def deserialize(self, data):
+        self.x, self.y, self.z, self.w = data

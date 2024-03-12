@@ -32,7 +32,8 @@ def unpack(fname_exo : str, dir_output : str):
         print('Output is not a folder.')
         return 2
 
-    pos = 10547*2048
+    # pos = 10547*2048 # First god
+    pos = 0
     while pos < TEXTURE_END:
         exo.seek(pos)
 
@@ -110,8 +111,6 @@ def unpack(fname_exo : str, dir_output : str):
         ## FINALIZE LOOP
         pos = next_pos
 
-    print(H3_un3_values)
-
 def rebuild(dir_input : str, fname_exo: str):
     try:
         exo = open(fname_exo, 'rb+')
@@ -119,21 +118,38 @@ def rebuild(dir_input : str, fname_exo: str):
         print(e, file = sys.stderr)
         return 2
 
-    for path in glob(os.path.join(dir_input, '*-*-*.png')):
-        block_idx, offset, bitdepth = os.path.basename(path).split('.')[0].split('-')
+    ###############
+    ## Save image
+    ###############
+    for path_png in glob(os.path.join(dir_input, '*-*-*.png')):
+        block_idx, offset, bitdepth = os.path.basename(path_png).split('.')[0].split('-')
         offset = int(offset, 16)
         bitdepth = int(bitdepth)
 
-        print(f"Packing {path}")
-        if bitdepth == 8:
-            data = convert_png_to_8bit_indexed(path)
-            exo.seek(offset)
-            exo.write(data)
-            print("Complete")
-        else:
-            raise Exception("Not implemented")
+        # print(f"Packing image: {path_png}")
+        # if bitdepth == 8:
+        #     data = convert_png_to_8bit_indexed(path_png)
+        #     exo.seek(offset)
+        #     exo.write(data)
+        # else:
+        #     print("24 bit images not implemented")
+        #     #TODO: raise Exception("Not implemented")
 
 
+    ###############
+    ## Save image info
+    ###############
+    for path_json in glob(os.path.join(dir_input, '*-*-*.json')):
+        if os.path.exists(path_json):
+            print(f"Writing image info: {path_json}")
+            with open(path_json, 'r') as f:
+                json_data = json.loads(f.read())
+
+            img_info = PackedImageInfo()
+            img_info.deserialize(json_data)
+            byte_data = img_info.rebuild()
+            exo.seek(img_info.offset_start)
+            exo.write(byte_data)
 
 
     exo.close()
