@@ -1,3 +1,6 @@
+# TODO: Make sure the GUI works well with 10216 (has animations with frame_num=-1)
+# TODO: Clicking around and saving is causing fields to change. It's caused by self.update_data_typed()
+
 import struct
 from typing import List
 from PIL import Image
@@ -54,6 +57,7 @@ class PackedImageInfo:
         self.offset_start: int = 0
         self.img_data_offset_qqq: int = 0
         self.offset_to_frames_header: int = 0
+        self.offset_to_image_specifications: int = 0
         self.offset_to_animations_header: int = 0
         self.offset_to_image: int = 0
         self.offset_to_frame_data: int = 0
@@ -68,15 +72,11 @@ class PackedImageInfo:
 
         self.header_size = readUInt32(data, 0)
         self.img_data_offset_qqq = readUInt32(data, 4)
-        if readUInt32(data, 8) + readUInt32(data, 12) == 0:
-            self.bits = 32
-        else:
-            self.bits = 16
 
         num_frames = readUInt16(data, self.header_size + 0x00)
-        num_animations_16bit = readUInt16(data, self.header_size + 0x02)
-        if num_animations_16bit > 0:
-            num_animations_32bit = 0
+        num_animations = readUInt16(data, self.header_size + 0x02)
+        if num_animations > 0:
+            self.bits = 16
             self.offset_to_frames_header = readUInt32(data, self.header_size + 0x04)
             self.offset_to_animations_header = readUInt32(data, self.header_size + 0x08)
             self.offset_to_image = readUInt32(data, self.header_size + 0x0C)
@@ -84,7 +84,8 @@ class PackedImageInfo:
             self.image_height = readUInt32(data, self.header_size + 0x14)
             self.bitdepth = readUInt32(data, self.header_size + 0x18)
         else:
-            num_animations_32bit = readUInt32(data, self.header_size + 0x04) # I have no idea why they do this, it's the dumbest thing ever
+            self.bits = 32
+            num_animations = readUInt32(data, self.header_size + 0x04) # I have no idea why they do this, it's the dumbest thing ever
             self.offset_to_frames_header = readUInt32(data, self.header_size + 4 + 0x04)
             self.offset_to_animations_header = readUInt32(data, self.header_size + 4 + 0x08)
             self.offset_to_image = readUInt32(data, self.header_size + 4 + 0x0C)
@@ -104,7 +105,14 @@ class PackedImageInfo:
             fid.frame_num = i_f
 
             offset_to_img_spec = readUInt32(data, self.offset_to_frames_header + i_f*8 + 0x04)
-            size_of_img_spec = 32*fid.count + 8*int((fid.count + 3)/4)
+            if (self.offset_to_image_specifications == 0) or (offset_to_img_spec < self.offset_to_image_specifications):
+                self.offset_to_image_specifications = offset_to_img_spec
+
+            if i_f < num_frames-1:
+                offset_to_next_img_spec = readUInt32(data, self.offset_to_frames_header + (i_f+1)*8 + 0x04)
+            else:
+                offset_to_next_img_spec = self.offset_to_frames_header
+            size_of_img_spec = offset_to_next_img_spec - offset_to_img_spec #32*fid.count + 8*int((fid.count + 3)/4)
 
             ## Create ImageSpecifications
             fid.img_specs = ImageSpecifications()
@@ -131,7 +139,7 @@ class PackedImageInfo:
 
         self.offset_to_frame_data = readUInt32(data, self.offset_to_animations_header + 0x04)
 
-        for i_a in range(num_animations_16bit + num_animations_32bit):
+        for i_a in range(num_animations):
             offset_animation = self.offset_to_animations_header + i_a*16
             self.animations.append(Animation())
             anim = self.animations[-1]
@@ -141,6 +149,10 @@ class PackedImageInfo:
             num_unknown_transforms = readUInt32(data, offset_animation + 0x08)
             offset_to_transform = readUInt32(data, offset_animation + 0x0C)
             unknown_transforms = []
+
+            ## CHECK: This is a weird exception we have to make. A "zero frame" animation has a single "-1" frame. It may have some transform though
+            if num_aniframes == 0:
+                num_aniframes = 1
 
             for idx in range(num_unknown_transforms):
                 ## I'm not entirely sure what this section is. Each frame is 4 points that can be positive or negative values.
@@ -155,16 +167,14 @@ class PackedImageInfo:
 
 
             for i_ftd in range(num_aniframes):
-                if num_animations_16bit > 0:
+                if self.bits == 16:
                     ## 16 bit values
                     frame_num = readInt16(data, offset_to_frame_data + i_ftd*4 + 0x00)
                     frame_duration = readUInt16(data, offset_to_frame_data + i_ftd*4 + 0x02)
-                    bits = 16
                 else:
                     ## 32 bit values
                     frame_num = readInt32(data, offset_to_frame_data + i_ftd*8 + 0x00)
                     frame_duration = readUInt32(data, offset_to_frame_data + i_ftd*8 + 0x04)
-                    bits = 32
 
                 # if frame_num == 0xFFFF:
                 #     ## I have no idea why this happens but it does.
@@ -184,23 +194,27 @@ class PackedImageInfo:
                 frame_timing_data.frame_num = frame_num # self.frame_image_data[frame_num]
                 frame_timing_data.unknown_transforms = unknown_transforms
 
-                if frame_num == 0xFFFF:
-                    ## I have no idea why this happens but it does. Frame_num is -1, so no image loaded
-                    pass
-                else:
-                    self.frame_image_data[frame_num].accessed += 1
+                # if frame_num == -1:
+                #     ## I have no idea why this happens but it does. Frame_num is -1, so no image loaded
+                #     pass
+                # else:
+                #     self.frame_image_data[frame_num].accessed += 1
 
     def rebuild(self) -> bytes:
         final_output = bytes()
 
         final_output += createUInt32(self.header_size)
         final_output += createUInt32(self.img_data_offset_qqq)
-        if self.bits == 32:
-            final_output += createInt32(0)
+
+        while (self.offset_to_image_specifications > len(final_output)):
             final_output += createInt32(0)
 
+        # if self.bits == 32:
+        #     final_output += createInt32(0)
+        #     final_output += createInt32(0)
+
         ############
-        ## Pack the frame data bytes
+        ## Pack the image specifications bytes
         ############
         byte_list_img_specs: List[bytes] = []
 
@@ -221,10 +235,10 @@ class PackedImageInfo:
             temp_bytes += createInt16(specs.scale.y)
             temp_bytes += specs.unknown_remaining
 
-            if self.bits == 32:
-                bytes_to_add = 16 - len(temp_bytes)%16
-                if bytes_to_add != 16:
-                    temp_bytes += b'\x00'*bytes_to_add
+            # if self.bits == 32:
+            #     bytes_to_add = 16 - len(temp_bytes)%16
+            #     if bytes_to_add != 16:
+            #         temp_bytes += b'\x00'*bytes_to_add
 
             byte_list_img_specs.append(temp_bytes)
 
@@ -235,10 +249,11 @@ class PackedImageInfo:
         ## Second Header
         ############
         output_second_header = bytes()
-        if self.bits == 16:
-            offset = 0x08
-        else:
-            offset = 0x10
+        offset = self.offset_to_image_specifications
+        # if self.bits == 16:
+        #     offset = 0x08
+        # else:
+        #     offset = 0x10
 
         for idx, fid in enumerate(self.frame_image_data):
             output_second_header += createInt32(fid.count)
@@ -259,7 +274,7 @@ class PackedImageInfo:
         byte_list_frame_timing_data: List[bytes] = []
         byte_list_unknown_transforms: List[bytes] = []
         for idx_anim, anim in enumerate(self.animations):
-            temp_bytes_timing = bytes()
+            temp_bytes_timing = bytes()# TODO + createInt16(-1)
             if self.bits == 16:
                 for idx_ftd, ftd in enumerate(anim.frame_timing_data):
                     temp_bytes_timing += createInt16(ftd.frame_num)
@@ -279,12 +294,16 @@ class PackedImageInfo:
 
             byte_list_frame_timing_data.append(temp_bytes_timing)
 
+            ## Unknown transforms
             temp_bytes_transform = bytes()
-            for idx_ftd, ftd in enumerate(anim.frame_timing_data):
+            if len(anim.frame_timing_data) > 0:
+                ftd = anim.frame_timing_data[0]
+
+                # for idx_ftd, ftd in enumerate(anim.frame_timing_data):
                 for ut in ftd.unknown_transforms:
                     temp_bytes_transform += createInt16(ut.x) + createInt16(ut.y) + createInt16(ut.z) + createInt16(ut.w)
-            if len(temp_bytes_transform) > 0:
-                byte_list_unknown_transforms.append(temp_bytes_transform)
+                if len(temp_bytes_transform) > 0:
+                    byte_list_unknown_transforms.append(temp_bytes_transform)
 
         offset_unknown_transforms = len(output_second_header) #sum([len(x) for x in byte_list_frame_timing_data])
 
@@ -301,7 +320,12 @@ class PackedImageInfo:
 
         idx_ut = 0
         for idx_anim, anim in enumerate(self.animations):
-            final_output += createInt16(len(anim.frame_timing_data))
+            if len(anim.frame_timing_data) == 1 and anim.frame_timing_data[-1].frame_num == -1:
+                num_aniframes = 0
+            else:
+                num_aniframes = len(anim.frame_timing_data)
+
+            final_output += createInt16(num_aniframes)
             final_output += createInt16(anim.animation_duration)
             final_output += createInt32(self.offset_to_frame_data + offset_frame_timing_data)
 
@@ -312,7 +336,9 @@ class PackedImageInfo:
 
             ## Handle Unknown transform
             num_ut = 0
-            for idx_ftd, ftd in enumerate(anim.frame_timing_data):
+            if len(anim.frame_timing_data) > 0:
+                ftd = anim.frame_timing_data[0]
+                # for idx_ftd, ftd in enumerate(anim.frame_timing_data):
                 num_ut += len(ftd.unknown_transforms)
 
             final_output += createInt32(num_ut)
@@ -320,7 +346,7 @@ class PackedImageInfo:
                 final_output += createInt32(0)
             else:
                 final_output += createInt32(self.offset_to_frames_header + offset_unknown_transforms)
-                ut = byte_list_frame_timing_data[idx_ut]
+                ut = byte_list_unknown_transforms[idx_ut]
                 offset_unknown_transforms += len(ut)
                 idx_ut += 1
 
@@ -341,9 +367,6 @@ class PackedImageInfo:
 
         return final_output
 
-        ## TODO: Pad zeros
-        ## TODO: Write image data
-
 
     def serialize(self):
         return {
@@ -352,6 +375,7 @@ class PackedImageInfo:
                 'offset_start': self.offset_start,
                 'img_data_offset_qqq': self.img_data_offset_qqq,
                 'offset_to_frames_header': self.offset_to_frames_header,
+                'offset_to_image_specifications': self.offset_to_image_specifications,
                 'offset_to_animations_header': self.offset_to_animations_header,
                 'offset_to_image': self.offset_to_image,
                 'offset_to_frame_data': self.offset_to_frame_data,
@@ -370,6 +394,7 @@ class PackedImageInfo:
         self.offset_start = data['header_offset']['offset_start']
         self.img_data_offset_qqq = data['header_offset']['img_data_offset_qqq']
         self.offset_to_frames_header = data['header_offset']['offset_to_frames_header']
+        self.offset_to_image_specifications = data['header_offset']['offset_to_image_specifications']
         self.offset_to_animations_header = data['header_offset']['offset_to_animations_header']
         self.offset_to_image = data['header_offset']['offset_to_image']
         self.offset_to_frame_data = data['header_offset']['offset_to_frame_data']

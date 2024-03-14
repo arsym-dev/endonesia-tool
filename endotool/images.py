@@ -83,7 +83,7 @@ def unpack(fname_exo : str, dir_output : str):
         else:
             raise Exception(f"Unsupported bitdepth: {bitdepth}")
 
-        print(f"Wrote PNG")
+        print(f"Extracted PNG")
 
         # Align position to the next nearest block
         if (exo.tell() % 2048) == 0:
@@ -106,7 +106,7 @@ def unpack(fname_exo : str, dir_output : str):
             # yaml.dump(ser, file, sort_keys=False)
             file.write(json.dumps(ser, indent=4))
 
-        print(f"Wrote JSON")
+        print(f"Extracted JSON")
 
         ## FINALIZE LOOP
         pos = next_pos
@@ -141,7 +141,7 @@ def rebuild(dir_input : str, fname_exo: str):
     ###############
     for path_json in glob(os.path.join(dir_input, '*-*-*.json')):
         if os.path.exists(path_json):
-            print(f"Writing image info: {path_json}")
+            print(f"Packing image info: {path_json}")
             with open(path_json, 'r') as f:
                 json_data = json.loads(f.read())
 

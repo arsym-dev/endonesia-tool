@@ -60,7 +60,8 @@ class DataManager(PackedImageInfo):
             Image.LANCZOS)
         img = img.rotate(specs.rotation)
 
-        self.images[framedata.frame_num] = img
+        if (framedata.frame_num) > -1:
+            self.images[framedata.frame_num] = img
 
 
     @property
@@ -88,6 +89,9 @@ class ApplicationUI(tk.Tk):
         self.dmgr = DataManager()
         self.animation_thread : threading.Thread = None
         self.animation_thread_lock = threading.Lock()
+        self.animation_selection_lock = threading.Lock()
+        self.animation_selection_thread_index = 0
+        self.animation_delayed_selection_lock = threading.Lock()
         self.current_frame_timing_data_index = 0
         self.is_running_animation = False
         self.animation_changed_timer : threading.Timer = None
@@ -259,6 +263,8 @@ class ApplicationUI(tk.Tk):
                 width=10,
                 font=("Helvatica", 12),
                 textvariable=self.var_framedata_crop[sb_index],
+                # validate='key',
+                # validatecommand=self.on_change_spinbox_framedata,
                 command=self.on_change_spinbox_framedata,
             ) for sb_index in range(len(self.var_framedata_crop))]
 
@@ -358,7 +364,7 @@ class ApplicationUI(tk.Tk):
         file_path = filedialog.askopenfilename(
             title='Open JSON for Endonesia animations',
             filetypes=(
-                ('JSON files', '*.json'),
+                ('Data files', '*.json *.png'),
                 ('All files', '*.*')
             )
         )
@@ -369,9 +375,11 @@ class ApplicationUI(tk.Tk):
         self.dmgr.load_json(file_path)
         self.title(f"Endonesia Animation Editor ({self.dmgr.fname_base})")
 
-        self.framedata_listbox.delete(0, tk.END)
-        self.animations_listbox.delete(0, tk.END)
+        self.selected_animation_index = 0
+        self.current_frame_timing_data_index = 0
 
+        self.animations_listbox.delete(0, tk.END)
+        self.framedata_listbox.delete(0, tk.END)
 
         for entry in self.dmgr.frame_image_data:
             self.framedata_listbox.insert(tk.END, entry.frame_num)
@@ -397,6 +405,9 @@ class ApplicationUI(tk.Tk):
 
 
     def command_save_json(self, event=None):
+        self.stop_animation()
+        self.update_data_typed()
+
         if not hasattr(self.dmgr, 'fname_json'):
             return
 
@@ -412,6 +423,7 @@ class ApplicationUI(tk.Tk):
 
     def on_framedata_select(self, event = None):
         self.stop_animation()
+        self.update_data_typed()
 
         selection = self.framedata_listbox.curselection() #event.widget.curselection()
         if not selection:
@@ -422,6 +434,21 @@ class ApplicationUI(tk.Tk):
         self.framedata_listbox_label.config(text=f"Frame ({index})")
         # self.populate_spinboxes(index)
         self.create_image_for_canvas(self.canvas, index)
+
+
+    def clear_spinboxes(self):
+        self.var_framedata_crop[0].set("")
+        self.var_framedata_crop[1].set("")
+        self.var_framedata_crop[2].set("")
+        self.var_framedata_crop[3].set("")
+        self.var_framedata_offset[0].set("")
+        self.var_framedata_offset[1].set("")
+        self.var_framedata_scale[0].set("")
+        self.var_framedata_scale[1].set("")
+        self.var_framedata_rotation.set("")
+        self.var_framedata_unknown[0].set("")
+        self.var_framedata_unknown[1].set("")
+        self.var_framedata_unknown[2].set("")
 
 
     def populate_spinboxes(self, framadata: FrameImageData):
@@ -500,11 +527,16 @@ class ApplicationUI(tk.Tk):
         frame_timing_data.frame_num = self.var_frame_timing_data_num.get()
 
 
-    def create_image_for_canvas(self, canvas: tk.Canvas, frame_num: int = -1):
-        if frame_num > 0:
+    def create_image_for_canvas(self, canvas: tk.Canvas, frame_num: int = None):
+        if frame_num is None:
+            framedata = self.dmgr.selected_framedata
+        elif frame_num > -1:
             framedata = self.dmgr.frame_image_data[frame_num]
         else:
-            framedata = self.dmgr.selected_framedata
+            self.clear_spinboxes()
+            canvas.delete("all")
+            canvas.create_text((int(self.canvas_dimensions[0]/2),int(self.canvas_dimensions[1]/2)), text="Frame num -1", fill='red', font=("Helvatica", 30))
+            return None
 
         self.dmgr.update_image(framedata)
         self.populate_spinboxes(framedata)
@@ -584,14 +616,15 @@ class ApplicationUI(tk.Tk):
         ###################
         ## FRAME TIMING
         ###################
-        index = self.frame_timing_data_listbox.curselection()[0]
-        frame_num = self.var_frame_timing_data_num.get()
-        duration = self.var_frame_timing_data_duration.get()
+        if len(self.frame_timing_data_listbox.curselection()) > 0:
+            index = self.frame_timing_data_listbox.curselection()[0]
+            frame_num = self.var_frame_timing_data_num.get()
+            duration = self.var_frame_timing_data_duration.get()
 
-        ## Update animation frame with spinbox values
-        frame_timing_data = self.dmgr.selected_frame_timing_data
-        frame_timing_data.frame_duration = duration
-        frame_timing_data.frame_num = frame_num
+            ## Update animation frame with spinbox values
+            frame_timing_data = self.dmgr.selected_frame_timing_data
+            frame_timing_data.frame_duration = duration
+            frame_timing_data.frame_num = frame_num
 
         ## We got here by pressing enter, update the image
         if event is not None:
@@ -664,6 +697,7 @@ class ApplicationUI(tk.Tk):
     def on_frame_timing_data_select(self, event = None, should_stop_animation=True):
         if should_stop_animation:
             self.stop_animation()
+        # self.update_data_typed()
 
         selection = self.frame_timing_data_listbox.curselection() #event.widget.curselection()
         if not selection:
@@ -687,6 +721,15 @@ class ApplicationUI(tk.Tk):
 
 
     def on_animation_select(self, event = None):
+        self.animation_selection_thread_index += 1
+        idx = self.animation_selection_thread_index
+
+        self.animation_selection_lock.acquire()
+
+        if idx != self.animation_selection_thread_index:
+            self.animation_selection_lock.release()
+            return
+
         selection = self.animations_listbox.curselection() #event.widget.curselection()
         if not selection:
             return
@@ -702,15 +745,19 @@ class ApplicationUI(tk.Tk):
         # self.is_running_animation = False
         # self.create_image_for_canvas(self.canvas, self.dmgr.animations[index].frame_timing_data[0].frame_num)
 
-        self.animation_changed_timer = threading.Timer(0.01, self.delayed_on_animation_select, [index])
+        self.animation_changed_timer = threading.Timer(0.1, self.delayed_on_animation_select, [index])
         self.animation_changed_timer.start()
+
+        self.animation_selection_lock.release()
 
 
     def delayed_on_animation_select(self, index):
         ## Enter the critical section
-        # self.animation_thread_lock.acquire()
+        self.animation_delayed_selection_lock.acquire()
 
         ## Critical section
+        self.stop_animation()
+        self.update_data_typed()
 
         self.animation_listbox_label.config(text=f"Animation ({index})")
         self.dmgr.selected_animation_index = index
@@ -729,6 +776,8 @@ class ApplicationUI(tk.Tk):
         # self.animation_thread_lock.release()
         self.animation_changed_timer = None
 
+        self.animation_delayed_selection_lock.release()
+
 
     def animation_loop(self):
         self.is_running_animation = True
@@ -740,6 +789,8 @@ class ApplicationUI(tk.Tk):
         ## Critical section
         while self.is_running_animation:
             current_animation = self.dmgr.selected_animation
+            if self.current_frame_timing_data_index >= len(current_animation.frame_timing_data):
+                self.current_frame_timing_data_index = 0
             current_frame_timing_data = current_animation.frame_timing_data[self.current_frame_timing_data_index]
             # self.dmgr.selected_framedata_index = frame_num
 
@@ -804,3 +855,9 @@ class ApplicationUI(tk.Tk):
 if __name__ == "__main__":
     app = ApplicationUI()
     app.mainloop()
+
+    # duration = 1/30
+
+    # while True:
+    #     time.sleep(duration)
+    #     app.update()
