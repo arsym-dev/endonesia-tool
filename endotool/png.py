@@ -1,4 +1,4 @@
-from PIL import Image
+from PIL import Image, ImagePalette
 
 def swap_palette(palette):
     swap_num = 8*4
@@ -49,11 +49,31 @@ def convert_png_to_8bit_indexed(fname):
     # Open the RGBA image
     rgba_image = Image.open(fname)
 
-    # Convert the image to indexed mode with an 8-bit palette
-    indexed_image = rgba_image.convert("P", palette=Image.ADAPTIVE, colors=256)
+    if rgba_image.mode == "P":
+        indexed_image = rgba_image
+
+        # For some reason it doesn't want to read the alpha channel properly so I need to do this
+        palette = indexed_image.getpalette('RGBA')
+        transparency = rgba_image.info.get("transparency")
+        if isinstance(transparency, int):
+            ## The value tells us which byte is transparent
+            palette[3+4*transparency] = 0
+
+        elif transparency is not None:
+            transparency = list(transparency)
+            for i in range(len(transparency)):
+                palette[3+4*i] = transparency[i]
+
+    else:
+        # The RGBA conversion is needed to get the palette transparency correct,
+        # otherwise it'll give every color an alpha of 255
+        rgba_image = rgba_image.convert("RGBA")
+
+        # Convert the image to indexed mode with an 8-bit palette
+        indexed_image = rgba_image.convert("P", palette=Image.ADAPTIVE, colors=256)
+        palette = indexed_image.getpalette('RGBA')
 
     data = indexed_image.getdata()
-    palette = indexed_image.getpalette('RGBA')
     swap_palette(palette)
 
     ## Convert alpha to half-byte
@@ -62,5 +82,23 @@ def convert_png_to_8bit_indexed(fname):
             palette[i] = 0x80
         else:
             palette[i] = palette[i] >> 1
-    
+
     return bytes(palette) + bytes(data)
+
+def convert_png_to_bitmap(fname):
+    # Open the RGBA image
+    rgba_image = Image.open(fname)
+
+    data = list(rgba_image.tobytes())
+    ## Convert alpha to half-byte, and make sure the RGB components are zero for transparent pixels
+    for i in range(3, len(data), 4):
+        if data[i] == 0xFF:
+            data[i] = 0x80
+        elif data[i] == 0x00 and data[i-1] == 0xFF and data[i-2] == 0xFF and data[i-3] == 0xFF:
+            data[i-1] = 0x00
+            data[i-2] = 0x00
+            data[i-3] = 0x00
+        else:
+            data[i] = data[i] >> 1
+
+    return bytes(data)

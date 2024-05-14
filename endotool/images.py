@@ -6,7 +6,7 @@ from PIL import Image
 from glob import glob
 from endotool.utils import read_in_chunks
 from endotool.bmp import write_file
-from endotool.png import convert_indexed_colors_to_png, convert_bitmap_to_png, convert_png_to_8bit_indexed
+from endotool.png import convert_indexed_colors_to_png, convert_bitmap_to_png, convert_png_to_8bit_indexed, convert_png_to_bitmap
 from endotool.file_structures.images import *
 
 TEXTURE_END = 0x04a89800
@@ -83,7 +83,7 @@ def unpack(fname_exo : str, dir_output : str):
         else:
             raise Exception(f"Unsupported bitdepth: {bitdepth}")
 
-        print(f"Extracted PNG")
+        # print(f"Extracted PNG")
 
         # Align position to the next nearest block
         if (exo.tell() % 2048) == 0:
@@ -106,42 +106,46 @@ def unpack(fname_exo : str, dir_output : str):
             # yaml.dump(ser, file, sort_keys=False)
             file.write(json.dumps(ser, indent=4))
 
-        print(f"Extracted JSON")
-
         ## FINALIZE LOOP
         pos = next_pos
 
-def rebuild(dir_input : str, fname_exo: str):
-    try:
-        exo = open(fname_exo, 'rb+')
-    except IOError as e:
-        print(e, file = sys.stderr)
-        return 2
+    print("Unpacking images complete")
+
+def rebuild(dir_input : str, fname_exo_in: str, fname_exo_out: str):
+    exo = open(fname_exo_out, 'wb+')
+    with open(fname_exo_in, 'rb') as exo_file_in:
+        exo.write(exo_file_in.read())
 
     ###############
     ## Save image
     ###############
+    print(f"== PACKING IMAGES: {dir_input} ==")
+
     for path_png in glob(os.path.join(dir_input, '*-*-*.png')):
+        print(f"{os.path.split(path_png)[1]}")
+
         block_idx, offset, bitdepth = os.path.basename(path_png).split('.')[0].split('-')
         offset = int(offset, 16)
         bitdepth = int(bitdepth)
 
-        # print(f"Packing image: {path_png}")
-        # if bitdepth == 8:
-        #     data = convert_png_to_8bit_indexed(path_png)
-        #     exo.seek(offset)
-        #     exo.write(data)
-        # else:
-        #     print("24 bit images not implemented")
-        #     #TODO: raise Exception("Not implemented")
+        if bitdepth == 8:
+            data = convert_png_to_8bit_indexed(path_png)
+            exo.seek(offset)
+            exo.write(data)
+        else:
+            data = convert_png_to_bitmap(path_png)
+            exo.seek(offset)
+            exo.write(data)
 
 
     ###############
     ## Save image info
     ###############
+    print(f"== PACKING IMAGE INFO: {dir_input} ==")
     for path_json in glob(os.path.join(dir_input, '*-*-*.json')):
         if os.path.exists(path_json):
-            print(f"Packing image info: {path_json}")
+            print(f"{os.path.split(path_json)[1]}")
+
             with open(path_json, 'r') as f:
                 json_data = json.loads(f.read())
 
@@ -151,5 +155,5 @@ def rebuild(dir_input : str, fname_exo: str):
             exo.seek(img_info.offset_start)
             exo.write(byte_data)
 
-
     exo.close()
+    print(f"Rebuild images complete")
