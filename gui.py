@@ -1,6 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
-from tkinter import filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, scrolledtext
 from PIL import Image, ImageTk
 import functools
 import os
@@ -8,6 +7,8 @@ import json
 import threading
 import time
 import shutil
+import subprocess
+import configparser
 from endotool.file_structures.images import PackedImageInfo, Animation, FrameImageData, FrameTimingData, Rect, Vector2
 
 class DataManager(PackedImageInfo):
@@ -84,6 +85,7 @@ class ApplicationUI(tk.Tk):
         super().__init__()
 
         self.canvas_dimensions = (800, 500)
+        self.resizable(False, False)
 
         ## VARIABLES
         self.dmgr = DataManager()
@@ -96,6 +98,24 @@ class ApplicationUI(tk.Tk):
         self.is_running_animation = False
         self.animation_changed_timer : threading.Timer = None
 
+        self.ini_config = configparser.ConfigParser()
+        if os.path.exists("config.ini"):
+            self.ini_config.read("config.ini")
+        else:
+            self.ini_config["paths"] = {
+                "exo_extract": "EXO.BIN",
+                "exo_rebuild": "EXO.BIN",
+                "elf_extract": "SLPM_620.47",
+                "elf_rebuild": "SLPM_620.47",
+                "csv_rebuild": "script.csv",
+                "csv_extract": "script.csv",
+                "images_extract": "",
+                "images_rebuild": "",
+                "font_rebuild": "assets/font_en.png",
+                "font_width_rebuild": "assets/font_widths.json",
+                "font_extract": "font.bmp",
+            }
+
 
         #######################
         ## FRAMES - OVERALL
@@ -104,11 +124,16 @@ class ApplicationUI(tk.Tk):
         for _ in range(4):
             main_frames.append(tk.Frame(self))
 
-        main_frames[3].grid(column=0, row=0, sticky="nw", columnspan=2, padx=3, pady=3) # Load buttons
         main_frames[0].grid(column=0, row=1, sticky="sw", padx=3, pady=3) # Tabs
         main_frames[1].grid(column=0, row=2, sticky="nw", padx=3, pady=3) # Spinboxes
         main_frames[2].grid(column=1, row=1, sticky="nw", rowspan=2, padx=3, pady=3) # Preview
+        main_frames[3].grid(column=0, row=3, sticky="nw", columnspan=2, padx=3, pady=3) # Load buttons
 
+        #######################
+        ## Commandline output
+        #######################
+        self.txt_output = scrolledtext.ScrolledText(main_frames[3], width=150, height=10)
+        self.txt_output.grid(column=0, row=0, sticky="w", padx=3)
 
         #######################
         ## GUI
@@ -116,22 +141,43 @@ class ApplicationUI(tk.Tk):
         self.title('Endonesia Animation Editor')
         self.bind('<Return>', self.update_data_typed)
 
-        ## LOAD FILE
-        self.var_filename_input = tk.StringVar()
-        filename_input = tk.Entry(main_frames[3], textvariable=self.var_filename_input)
-        load_button = tk.Button(main_frames[3], text="Load JSON", command=self.command_load_json)
-        filename_input.grid(column=1, row=0, sticky="ew", padx=3, ipadx=100)
-        load_button.grid(column=0, row=0, sticky="w", padx=3)
+        # ## LOAD FILE
+        # self.var_filename_input = tk.StringVar()
+        # filename_input = tk.Entry(main_frames[3], textvariable=self.var_filename_input)
+        # load_button = tk.Button(main_frames[3], text="Load JSON", command=self.command_load_json)
+        # filename_input.grid(column=1, row=0, sticky="ew", padx=3, ipadx=100)
+        # load_button.grid(column=0, row=0, sticky="w", padx=3)
 
 
         #######################
         ## MENU BAR
         #######################
         menubar = tk.Menu(self)
-        filemenu = tk.Menu(menubar, tearoff=0)
-        filemenu.add_command(label="Load JSON", command=self.command_load_json)
-        filemenu.add_command(label="Save JSON", command=self.command_save_json)
-        menubar.add_cascade(label="File", menu=filemenu)
+        menucascade_file = tk.Menu(menubar, tearoff=0)
+        menucascade_file.add_command(label="Open Animation JSON", command=self.command_load_json, accelerator="Ctrl+O")
+        menucascade_file.add_command(label="Save Animation JSON", command=self.command_save_json, accelerator="Ctrl+S")
+        menubar.add_cascade(label="File", underline=0, menu=menucascade_file)
+
+        menucascade_extract = tk.Menu(menubar, tearoff=0)
+        menucascade_extract.add_command(label="Extract Font", command=self.command_extract_font)
+        menucascade_extract.add_command(label="Extract Script", command=self.command_extract_script)
+        menucascade_extract.add_command(label="Extract Images", command=self.command_extract_images)
+        menucascade_extract.add_separator()
+        menucascade_extract.add_command(label="Extract Font (skip dialogs)", command=functools.partial(self.command_extract_font, fast=True))
+        menucascade_extract.add_command(label="Extract Script (skip dialogs)", command=functools.partial(self.command_extract_script, fast=True))
+        menucascade_extract.add_command(label="Extract Images (skip dialogs)", command=functools.partial(self.command_extract_images, fast=True))
+        menubar.add_cascade(label="Extract", underline=0, menu=menucascade_extract)
+
+        menucascade_rebuild = tk.Menu(menubar, tearoff=0)
+        menucascade_rebuild.add_command(label="Rebuild Font", command=self.command_rebuild_font)
+        menucascade_rebuild.add_command(label="Rebuild Script", command=self.command_rebuild_script)
+        menucascade_rebuild.add_command(label="Rebuild Images", command=self.command_rebuild_images)
+        menucascade_rebuild.add_separator()
+        menucascade_rebuild.add_command(label="Rebuild Font (skip dialogs)", command=functools.partial(self.command_rebuild_font, fast=True))
+        menucascade_rebuild.add_command(label="Rebuild Script (skip dialogs)", command=functools.partial(self.command_rebuild_script, fast=True))
+        menucascade_rebuild.add_command(label="Rebuild Images (skip dialogs)", command=functools.partial(self.command_rebuild_images, fast=True))
+        menubar.add_cascade(label="Rebuild", underline=0, menu=menucascade_rebuild)
+
         self.config(menu=menubar)
 
         self.bind('<Control-o>', self.command_load_json)
@@ -360,11 +406,18 @@ class ApplicationUI(tk.Tk):
         #     mf.pack()
 
 
+    def save_ini_config(self):
+        with open('config.ini', 'w') as f:
+            self.ini_config.write(f)
+
+
     def command_load_json(self, event=None):
         file_path = filedialog.askopenfilename(
             title='Open JSON for Endonesia animations',
             filetypes=(
-                ('Data files', '*.json *.png'),
+                ('PNG files', '*.png'),
+                ('JSON files', '*.json'),
+                # ('Data files', '*.json *.png'),
                 ('All files', '*.*')
             )
         )
@@ -390,7 +443,7 @@ class ApplicationUI(tk.Tk):
         ## Update the maximum frame_timing_data number
         self.spinboxes_frame_timing_data_num.config(to=len(self.dmgr.frame_image_data)-1)
 
-        self.var_filename_input.set(file_path)
+        # self.var_filename_input.set(file_path)
         # self.filename_input.config(state='disabled',
 
         ## Select first animation and trigger listbox event
@@ -419,6 +472,411 @@ class ApplicationUI(tk.Tk):
 
         with open(self.dmgr.fname_json, 'w') as file:
             file.write(json.dumps(output_dict, indent=4))
+
+
+    def command_extract_font(self, fast=False):
+        ##############
+        if fast:
+            path_elf = self.ini_config["paths"]["elf_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["elf_extract"])
+            path_elf = filedialog.askopenfilename(
+                title='SLPM_620.47',
+                filetypes=(
+                    ('SLPM_620.47', '*.47 *.bak'),
+                    ('All files', '*.*')
+                ),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_elf == '':
+                return
+            self.ini_config["paths"]["elf_extract"] = path_elf
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_bmp = self.ini_config["paths"]["font_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["font_extract"])
+            path_bmp = filedialog.asksaveasfilename(
+                title='Extracted font',
+                filetypes=(('Bitmap', '*.bmp'),),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_bmp == '':
+                return
+            self.ini_config["paths"]["font_extract"] = path_bmp
+            self.save_ini_config()
+
+        cmd = f'python endonesia-tool.py font-extract -e "{path_elf}" -f "{path_bmp}"'
+        thread = threading.Thread(target=self.run_commandline, args=(cmd,))
+        thread.start()
+
+
+    def command_rebuild_font(self, fast=False):
+        ##############
+        if fast:
+            path_font = self.ini_config["paths"]["font_rebuild"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["font_rebuild"])
+            path_font = filedialog.askopenfilename(
+                title='Font Image',
+                filetypes=(
+                    ('Image', '*.png *.bmp'),
+                    ('All files', '*.*')
+                ),
+                initialdir=os.path.join(os.curdir,"assets"),
+                initialfile="font_en.png",
+            )
+            if path_font == '':
+                return
+            self.ini_config["paths"]["font_rebuild"] = path_font
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_font_width = self.ini_config["paths"]["font_width_rebuild"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["font_width_rebuild"])
+            path_font_width = filedialog.askopenfilename(
+                title='Font Width JSON',
+                filetypes=(
+                    ('JSON', '*.json'),
+                    ('All files', '*.*')
+                ),
+                initialdir=os.path.join(os.curdir,"assets"),
+                initialfile="font_widths.json",
+            )
+            if path_font_width == '':
+                return
+            self.ini_config["paths"]["font_width_rebuild"] = path_font_width
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_input = self.ini_config["paths"]["elf_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["elf_extract"])
+            path_input = filedialog.askopenfilename(
+                title='Input SLPM_620.47',
+                filetypes=(
+                    ('SLPM_620.47', '*.47 *.bak'),
+                    ('All files', '*.*')
+                ),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_input == '':
+                return
+            self.ini_config["paths"]["elf_extract"] = path_input
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_output = self.ini_config["paths"]["elf_rebuild"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["elf_rebuild"])
+            path_output = filedialog.asksaveasfilename(
+                title='Output SLPM_620.47',
+                filetypes=(('SLPM_620.47', '*.47'),),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_output == '':
+                return
+            self.ini_config["paths"]["elf_rebuild"] = path_output
+            self.save_ini_config()
+
+        cmd = f'python endonesia-tool.py font-rebuild -f "{path_font}" -v "{path_font_width}" -ei "{path_input}" -eo "{path_output}"'
+        thread = threading.Thread(target=self.run_commandline, args=(cmd,))
+        thread.start()
+
+
+    def command_extract_script(self, fast=False):
+        ##############
+        if fast:
+            path_exo = self.ini_config["paths"]["exo_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["exo_extract"])
+            path_exo = filedialog.askopenfilename(
+                title='Input EXO.BIN',
+                filetypes=(
+                    ('BIN file', '*.bin *.bak'),
+                    ('All files', '*.*')
+                ),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_exo == '':
+                return
+            self.ini_config["paths"]["exo_extract"] = path_exo
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_elf = self.ini_config["paths"]["elf_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["elf_extract"])
+            path_elf = filedialog.askopenfilename(
+                title='Input SLPM_620.47',
+                filetypes=(
+                    ('SLPM_620.47', '*.47 *.bak'),
+                    ('All files', '*.*')
+                ),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_elf == '':
+                return
+            self.ini_config["paths"]["elf_extract"] = path_elf
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_output = self.ini_config["paths"]["csv_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["csv_extract"])
+            path_output = filedialog.asksaveasfilename(
+                title='Output CSV',
+                filetypes=(('CSV file', '*.csv'),),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_output == '':
+                return
+            self.ini_config["paths"]["csv_extract"] = path_output
+            self.save_ini_config()
+
+        cmd = f'python endonesia-tool.py script-extract -e "{path_elf}" -x "{path_exo}" -c "{path_output}" -r'
+        thread = threading.Thread(target=self.run_commandline, args=(cmd,))
+        thread.start()
+
+
+    def command_rebuild_script(self, fast=False):
+        ##############
+        if fast:
+            path_csv = self.ini_config["paths"]["csv_rebuild"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["csv_rebuild"])
+            path_csv = filedialog.askopenfilename(
+                title='Input CSV script',
+                filetypes=(
+                    ('CSV file', '*.csv'),
+                    ('All files', '*.*')
+                ),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_csv == '':
+                return
+            self.ini_config["paths"]["csv_rebuild"] = path_csv
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_elf_input = self.ini_config["paths"]["elf_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["elf_extract"])
+            path_elf_input = filedialog.askopenfilename(
+                title='Input SLPM_620.47',
+                filetypes=(
+                    ('SLPM_620.47', '*.47 *.bak'),
+                    ('All files', '*.*')
+                ),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_elf_input == '':
+                return
+            self.ini_config["paths"]["elf_extract"] = path_elf_input
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_elf_output = self.ini_config["paths"]["elf_rebuild"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["elf_rebuild"])
+            path_elf_output = filedialog.asksaveasfilename(
+                title='Output SLPM_620.47',
+                filetypes=(('SLPM_620.47', '*.47'),),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_elf_output == '':
+                return
+            self.ini_config["paths"]["elf_rebuild"] = path_elf_output
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_exo_input = self.ini_config["paths"]["exo_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["exo_extract"])
+            path_exo_input = filedialog.askopenfilename(
+                title='Input EXO.BIN',
+                filetypes=(
+                    ('BIN File', '*.bin *.bak'),
+                    ('All files', '*.*')
+                ),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_exo_input == '':
+                return
+            self.ini_config["paths"]["exo_extract"] = path_exo_input
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_exo_output = self.ini_config["paths"]["exo_rebuild"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["exo_rebuild"])
+            path_exo_output = filedialog.asksaveasfilename(
+                title='Output EXO.BIN',
+                filetypes=(('BIN file', '*.bin'),),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_exo_output == '':
+                return
+            self.ini_config["paths"]["exo_rebuild"] = path_exo_output
+            self.save_ini_config()
+
+        cmd = f'python endonesia-tool.py script-rebuild -c "{path_csv}" -ei "{path_elf_input}" -eo "{path_elf_output}" -xi "{path_exo_input}" -xo "{path_exo_output}"'
+        thread = threading.Thread(target=self.run_commandline, args=(cmd,))
+        thread.start()
+
+
+    def command_extract_images(self, fast=False):
+        ##############
+        if fast:
+            path_exo_input = self.ini_config["paths"]["exo_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["exo_extract"])
+            path_exo_input = filedialog.askopenfilename(
+                title='Input EXO.BIN',
+                filetypes=(
+                    ('BIN File', '*.bin *.bak'),
+                    ('All files', '*.*')
+                ),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_exo_input == '':
+                return
+            self.ini_config["paths"]["exo_extract"] = path_exo_input
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_images = self.ini_config["paths"]["images_extract"]
+        else:
+            fdir = self.ini_config["paths"]["images_extract"]
+            path_images = filedialog.askdirectory(
+                title='Output image folder',
+                initialdir=fdir
+            )
+            if path_images == '':
+                return
+            self.ini_config["paths"]["images_extract"] = path_images
+            self.save_ini_config()
+
+        cmd = f'python endonesia-tool.py image-extract -x "{path_exo_input}" -o "{path_images}"'
+        thread = threading.Thread(target=self.run_commandline, args=(cmd,))
+        thread.start()
+
+
+    def command_rebuild_images(self, fast=False):
+        ##############
+        if fast:
+            path_images = self.ini_config["paths"]["images_rebuild"]
+        else:
+            fdir = self.ini_config["paths"]["images_rebuild"]
+            path_images = filedialog.askdirectory(
+                title='Input image folder',
+                initialdir=fdir
+            )
+            if path_images == '':
+                return
+            self.ini_config["paths"]["images_rebuild"] = path_images
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_exo_input = self.ini_config["paths"]["exo_extract"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["exo_extract"])
+            path_exo_input = filedialog.askopenfilename(
+                title='Input EXO.BIN',
+                filetypes=(('BIN file', '*.bin'),),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_exo_input == '':
+                return
+            self.ini_config["paths"]["exo_extract"] = path_exo_input
+            self.save_ini_config()
+
+        ##############
+        if fast:
+            path_exo_output = self.ini_config["paths"]["exo_rebuild"]
+        else:
+            fdir, fname = os.path.split(self.ini_config["paths"]["exo_rebuild"])
+            path_exo_output = filedialog.asksaveasfilename(
+                title='Output EXO.BIN',
+                filetypes=(('BIN file', '*.bin'),),
+                initialfile=fname,
+                initialdir=fdir,
+            )
+            if path_exo_output == '':
+                return
+            self.ini_config["paths"]["exo_rebuild"] = path_exo_output
+            self.save_ini_config()
+
+        cmd = f'python endonesia-tool.py image-rebuild -i "{path_images}" -xi "{path_exo_input}" -xo "{path_exo_output}"'
+        thread = threading.Thread(target=self.run_commandline, args=(cmd,))
+        thread.start()
+
+
+    def run_commandline(self, cmd):
+        self.txt_output.delete('1.0', tk.END)
+        self.txt_output.insert(tk.END, f'> {cmd}\n\n')
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+
+        i = 0
+        while True:
+            output = process.stdout.read(1).decode() # read byte from pipe
+
+            if output == '' and process.poll() != None:
+                break
+
+            if output != '':
+                i += 1
+                self.txt_output.insert("end", output)   # write character into Text Widget
+
+                if i%150==0:
+                    self.txt_output.yview_moveto(1) # scroll to bottom
+                if output == '\n':
+                    i = 0
+                    self.txt_output.yview_moveto(1)
+
+        i = 0
+        while True:
+            output = process.stderr.read(1).decode() # read byte from pipe
+
+            if output == '' and process.poll() != None:
+                break
+
+            if output != '':
+                i += 1
+                self.txt_output.insert("end", output)   # write character into Text Widget
+
+                if i%100==0:
+                    self.txt_output.yview_moveto(1) # scroll to bottom
+
+        self.txt_output.yview_moveto(1)
 
 
     def on_framedata_select(self, event = None):

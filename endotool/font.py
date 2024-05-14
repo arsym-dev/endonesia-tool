@@ -33,12 +33,12 @@ def extract(fname_elf, fname_font):
 
 def rebuild(fname_font, fname_elf_in, fname_elf_out, variable_width = False):
     elf_file_out = open(fname_elf_out, 'wb')
-    
+
     ## Copy the input
     with open(fname_elf_in, 'rb') as elf_file_in:
         elf_file_out.write(elf_file_in.read())
-    
-    
+
+
     ########
     ## Format font image
     ########
@@ -54,7 +54,7 @@ def rebuild(fname_font, fname_elf_in, fname_elf_out, variable_width = False):
     if width != WIDTH or height != HEIGHT:
         print(f'Source file needs to have the dimensions {WIDTH}x{HEIGHT}. Got {width}x{height}')
         return 2
-    
+
     ## Palette needs to be in a specific order for alpha transparency to work correctly
     ## Get the palette as a list of (R,B,G) tuples
     palette = img.getpalette()
@@ -116,7 +116,7 @@ def rebuild(fname_font, fname_elf_in, fname_elf_out, variable_width = False):
 
         for i in range(0, TABLE_SIZE):
             elf_file_out.write(struct.pack('B', widths_data[i]))
-        
+
         elf_file_out.close()
 
         if not check_bin('armips'):
@@ -131,5 +131,5 @@ def rebuild(fname_font, fname_elf_in, fname_elf_out, variable_width = False):
         except subprocess.CalledProcessError:
             print('armips failed to replace variable font width code.')
             return 2
-    
+
     print("Done")

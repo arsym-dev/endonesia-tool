@@ -231,12 +231,21 @@ image_rebuild_parser.add_argument(
     )
 
 image_rebuild_parser.add_argument(
-    '-x',
+    '-xi',
+    # '--exofin',
+    required = True,
+    action = 'store',
+    metavar = '[input EXO.BIN]',
+    help = 'Input EXO.BIN assets file.'
+    )
+
+image_rebuild_parser.add_argument(
+    '-xo',
     # '--exofin',
     required = True,
     action = 'store',
     metavar = '[output EXO.BIN]',
-    help = 'EXO.BIN file to pack images into'
+    help = 'Output EXO.BIN assets file to rebuild images into.'
     )
 
 
@@ -278,7 +287,8 @@ elif args.cmd == 'image-extract':
 elif args.cmd == 'image-rebuild':
     images.rebuild(
         dir_input = args.i,
-        fname_exo = args.x,
+        fname_exo_in = args.xi,
+        fname_exo_out = args.xo,
     )
 #     scripts.calculateFreeSpace(args.elf_file, args.exo_bin)
 

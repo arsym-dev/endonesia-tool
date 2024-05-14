@@ -87,14 +87,14 @@ def hex_length(string):
 
 def parse_special_char(string, index):
     if jis208.isSpecialStart(string[index]):
-        address = '' 
+        address = ''
         i = 0
         while True:
             i += 1
             if jis208.isSpecialEnd(string[index + i]):
                 i += 1
                 break
-            address += string[index + i] 
+            address += string[index + i]
         return {'address': int(address) if address else 0, 'length': i, 'offset': 0, 'bit_size': 2, 'format': '>H'}
     if string[index] == '\\':
         return {'address': jis208.LINEBREAK, 'length': 2, 'offset': -1, 'bit_size': 1, 'format': 'B'}
@@ -202,10 +202,10 @@ def extract(fname_elf, fname_exo, fname_csv, overwrite = False):
 
             writer.writerow(row)
             wrote = True
-        
+
         if wrote:
             writer.writerow([])
-    
+
     elf_file.close()
     exo_file.close()
     csv_file.close()
@@ -276,23 +276,23 @@ def rebuild(fname_csv, fname_elf_in, fname_elf_out, fname_exo_in, fname_exo_out)
                     break
             if found_entry is None:
                 raise Exception("ELF Entry not found")
-            
+
             if text_en != '':
                 found_entry.text = text_en
                 found_entry.transform_ascii = True
             else:
                 found_entry.text = text_jp
                 found_entry.transform_ascii = False
-    
+
     elf_mgr.writeToFile(elf_file_out)
-    
+
 
     #######
     ## EXO Blocks
     ## Load up the blocks from the original file and save them as-is, but more compressed
     #######
     print("Reading old EXO data")
-    blocks = getExoBlocks(elf_file_out, exo_file_out)
+    blocks: list[ExoScriptBlock] = getExoBlocks(elf_file_out, exo_file_out)
 
     print("Rebuilding EXO file")
     ## Process EXO rows nd add translated text to them
@@ -312,7 +312,7 @@ def rebuild(fname_csv, fname_elf_in, fname_elf_out, fname_exo_in, fname_exo_out)
                     break
             if found_entry is None:
                 raise Exception("EXO Block not found")
-            
+
 
             found_entry : TextEntry = None
             for entry in entry.text_entries:
@@ -328,12 +328,13 @@ def rebuild(fname_csv, fname_elf_in, fname_elf_out, fname_exo_in, fname_exo_out)
             else:
                 found_entry.text = text_jp
                 found_entry.transform_ascii = False
-        
-    
+
+
     ## Create the final hex blocks
     curr_exo_address = blocks[0].exo_address
 
     for entry in blocks:
+        # print(f'{entry.exo_address:02X}')
         bin_data = entry.toBinary()
 
         ## Adjust the ELF file
@@ -348,7 +349,7 @@ def rebuild(fname_csv, fname_elf_in, fname_elf_out, fname_exo_in, fname_exo_out)
         exo_file_out.write(bin_data)
 
         curr_exo_address += len(pad_to_nearest(bin_data, k=1024))
-    
+
     elf_file_out.close()
     exo_file_out.close()
     print("Done")
@@ -389,11 +390,11 @@ Free bytes: {remaining_size_in_block:4d}
             print(f"| Percentage Free: {100*(remaining_size_in_block/exoblock.text_size):0.1f}%")
         else:
             print("")
-        
+
         text_bytes += exoblock.text_size
         free_bytes += remaining_size_in_block
 
         prev_block_val = block_val + math.ceil(exoblock.exo_size/2048)
-    
+
     print(f"Text: {text_bytes} | Free: {free_bytes}")
 
