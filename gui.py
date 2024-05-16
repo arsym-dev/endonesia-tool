@@ -79,13 +79,27 @@ class DataManager(PackedImageInfo):
     def selected_frame_timing_data(self) -> FrameTimingData:
         return self.selected_animation.frame_timing_data[self.selected_frame_timing_data_index]
 
+class MyCanvas(tk.Canvas):
+    def __init__(self, root, *args, **kwargs):
+        #self.root = root
+        self.width = 0
+        self.height = 0
+        super().__init__(root, *args, **kwargs)
+        # self.canvas = tk.Canvas(root, *args, **kwargs)
+        # self.canvas.pack(fill=tk.BOTH, expand=tk.YES)
+
+        root.bind('<Configure>', self.resize)
+
+    def resize(self, event):
+        self.width = event.width
+        self.height = event.height
+
 
 class ApplicationUI(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.canvas_dimensions = (800, 500)
-        self.resizable(False, False)
+        # self.resizable(False, False)
 
         ## VARIABLES
         self.dmgr = DataManager()
@@ -124,22 +138,28 @@ class ApplicationUI(tk.Tk):
         for _ in range(4):
             main_frames.append(tk.Frame(self))
 
-        main_frames[0].grid(column=0, row=1, sticky="sw", padx=3, pady=3) # Tabs
-        main_frames[1].grid(column=0, row=2, sticky="nw", padx=3, pady=3) # Spinboxes
-        main_frames[2].grid(column=1, row=1, sticky="nw", rowspan=2, padx=3, pady=3) # Preview
-        main_frames[3].grid(column=0, row=3, sticky="nw", columnspan=2, padx=3, pady=3) # Load buttons
+        self.grid_columnconfigure(1, weight=1) # Expand the canvas horizontally
+        self.grid_rowconfigure(1, weight=1) # Expand the canvas vertically
+
+        main_frames[0].grid(column=0, row=0, sticky="sw", padx=3, pady=3) # Tabs
+        main_frames[1].grid(column=0, row=1, sticky="nw", padx=3, pady=3) # Spinboxes
+        main_frames[2].grid(column=1, row=0, sticky="nwse", rowspan=2, padx=3, pady=3) # Preview
+        main_frames[3].grid(column=0, row=2, sticky="nswe", columnspan=2, padx=3, pady=3) # Load buttons
 
         #######################
         ## Commandline output
         #######################
-        self.txt_output = scrolledtext.ScrolledText(main_frames[3], width=150, height=10)
-        self.txt_output.grid(column=0, row=0, sticky="w", padx=3)
+        self.txt_output = scrolledtext.ScrolledText(main_frames[3], height=7) # width=150,
+        self.txt_output.grid(column=0, row=0, sticky="nwse", padx=3)
+        main_frames[3].grid_columnconfigure(0, weight=1) # Expand the textbox horizontally
 
         #######################
         ## GUI
         #######################
         self.title('Endonesia Animation Editor')
         self.bind('<Return>', self.update_data_typed)
+        self.bind('<FocusOut>', self.update_data_typed)
+        self.bind('<Configure>', self.resize)
 
         # ## LOAD FILE
         # self.var_filename_input = tk.StringVar()
@@ -251,16 +271,17 @@ class ApplicationUI(tk.Tk):
                 bottom_frame,
                 from_=0,
                 to=1000,
-                width=10,
+                width=5,
                 font=("Helvatica", 12),
                 textvariable=self.var_frame_timing_data_num,
                 command=self.update_data_typed, #self.on_change_spinbox_frame_timing_data_num,
             )
+
         self.spinboxes_frame_timing_data_duration = tk.Spinbox(
                 bottom_frame,
                 from_=0,
                 to=1000,
-                width=10,
+                width=5,
                 font=("Helvatica", 12),
                 textvariable=self.var_frame_timing_data_duration,
                 command=self.update_data_typed, #self.on_change_spinbox_animation,
@@ -306,7 +327,7 @@ class ApplicationUI(tk.Tk):
                 frame,
                 from_=0,
                 to=1000,
-                width=10,
+                width=5,
                 font=("Helvatica", 12),
                 textvariable=self.var_framedata_crop[sb_index],
                 # validate='key',
@@ -325,7 +346,7 @@ class ApplicationUI(tk.Tk):
                 frame,
                 from_=-1000,
                 to=1000,
-                width=10,
+                width=5,
                 font=("Helvatica", 12),
                 textvariable=self.var_framedata_offset[sb_index],
                 command=self.on_change_spinbox_framedata,
@@ -340,7 +361,7 @@ class ApplicationUI(tk.Tk):
                 frame,
                 from_=-1000,
                 to=1000,
-                width=10,
+                width=5,
                 font=("Helvatica", 12),
                 textvariable=self.var_framedata_scale[sb_index],
                 command=self.on_change_spinbox_framedata,
@@ -355,7 +376,7 @@ class ApplicationUI(tk.Tk):
                 frame,
                 from_=-1000,
                 to=1000,
-                width=10,
+                width=5,
                 font=("Helvatica", 12),
                 textvariable=self.var_framedata_rotation,
                 command=self.on_change_spinbox_framedata,
@@ -369,7 +390,7 @@ class ApplicationUI(tk.Tk):
                 frame,
                 from_=-1000,
                 to=1000,
-                width=10,
+                width=5,
                 font=("Helvatica", 12),
                 textvariable=self.var_framedata_unknown[sb_index],
                 command=self.on_change_spinbox_framedata,
@@ -388,19 +409,24 @@ class ApplicationUI(tk.Tk):
         ## PREVIEW CANVAS
         #######################
         frame_zoom = tk.Frame(main_frames[2])
+        main_frames[2].grid_columnconfigure(0, weight=1) # Expand the canvas
+        main_frames[2].grid_rowconfigure(1, weight=1) # Expand the canvas
+
+
         self.var_canvas_scale = tk.IntVar(value=100)
         tk.Button(frame_zoom, text='–', command=self.on_canvas_scale_down).grid(column=0, row=0, sticky="sw", padx=3, pady=3, ipadx=5)
         tk.Button(frame_zoom, text='+', command=self.on_canvas_scale_up).grid(column=1, row=0, sticky="se", padx=3, pady=3, ipadx=5)
         self.canvas_label = tk.Label(frame_zoom, text="100%")
-        self.canvas_label.grid(column=0, row=1, sticky="n", columnspan=2, padx=3, pady=3)
+        # self.canvas_label.grid(column=0, row=1, sticky="n", columnspan=2, padx=3, pady=3)
+        self.canvas_label.grid(column=2, row=0, sticky="e", padx=3, pady=3)
         # frame_zoom.pack(side='left')
 
 
-        self.canvas = tk.Canvas(main_frames[2], width=self.canvas_dimensions[0], height=self.canvas_dimensions[1], background='#856ff8')
+        self.canvas = MyCanvas(main_frames[2], background='#856ff8')
         # self.canvas.pack(side='left')
 
         frame_zoom.grid(column=0, row=0, sticky="s")
-        self.canvas.grid(column=0, row=1, sticky="n")
+        self.canvas.grid(column=0, row=1, sticky="nwse")
 
         # for mf in main_frames:
         #     mf.pack()
@@ -941,7 +967,7 @@ class ApplicationUI(tk.Tk):
             return
         scale *= 2
         self.var_canvas_scale.set(scale)
-        self.canvas_label.config(text=f'{scale}%')
+        self.canvas_label.config(text=f'{scale:3.0f}%')
         self.create_image_for_canvas(self.canvas)
 
 
@@ -951,7 +977,7 @@ class ApplicationUI(tk.Tk):
             return
         scale = int(scale/2)
         self.var_canvas_scale.set(scale)
-        self.canvas_label.config(text=f'{scale}%')
+        self.canvas_label.config(text=f'{scale:3.0f}%')
         self.create_image_for_canvas(self.canvas)
 
 
@@ -993,7 +1019,7 @@ class ApplicationUI(tk.Tk):
         else:
             self.clear_spinboxes()
             canvas.delete("all")
-            canvas.create_text((int(self.canvas_dimensions[0]/2),int(self.canvas_dimensions[1]/2)), text="Frame num -1", fill='red', font=("Helvatica", 30))
+            canvas.create_text((int(self.canvas.width/2),int(self.canvas.height/2)), text="Frame num -1", fill='red', font=("Helvatica", 30))
             return None
 
         self.dmgr.update_image(framedata)
@@ -1009,19 +1035,25 @@ class ApplicationUI(tk.Tk):
 
         ## Draw lines that signify the (0,0) offset
         canvas.delete("all")
-        canvas.create_line(int(self.canvas_dimensions[0]/2), 0, int(self.canvas_dimensions[0]/2), self.canvas_dimensions[1], stipple="gray50") #dash=10
-        canvas.create_line(0, int(self.canvas_dimensions[1]/2), self.canvas_dimensions[0], int(self.canvas_dimensions[1]/2), stipple="gray50") #dash=10
+        canvas.create_line(int(self.canvas.width/2), 0, int(self.canvas.width/2), self.canvas.height, stipple="gray50") #dash=10
+        canvas.create_line(0, int(self.canvas.height/2), self.canvas.width, int(self.canvas.height/2), stipple="gray50") #dash=10
 
 
-        ## Dray the image
+        ## Draw the image
         photo = ImageTk.PhotoImage(img.resize((int(img.width * canvas_scale), int(img.height * canvas_scale))))
         canvas.create_image(
-            int(self.canvas_dimensions[0]/2)+framedata.img_specs.offset.x*canvas_scale,
-            int(self.canvas_dimensions[1]/2)+framedata.img_specs.offset.y*canvas_scale,
+            int(self.canvas.width/2)+framedata.img_specs.offset.x*canvas_scale,
+            int(self.canvas.height/2)+framedata.img_specs.offset.y*canvas_scale,
             image=photo,
             anchor='nw'
             )
         canvas.image = photo
+
+
+    def resize(self, event):
+        ## Redraw the canvas on resize
+        if hasattr(self, 'canvas') and hasattr(self, 'dmgr') and hasattr(self.dmgr, 'frame_image_data'):
+            self.create_image_for_canvas(self.canvas)
 
 
     def update_data_typed(self, event=None, *args, **kwargs):
@@ -1094,7 +1126,7 @@ class ApplicationUI(tk.Tk):
                 self.frame_timing_data_listbox.delete(index)
                 self.frame_timing_data_listbox.insert(index, frame_num)
                 self.frame_timing_data_listbox.select_set(index)
-                self.on_frame_timing_data_select(should_stop_animation=False)
+                self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
 
                 self.create_image_for_canvas(self.canvas, frame_num)
             else:
@@ -1152,10 +1184,11 @@ class ApplicationUI(tk.Tk):
         self.create_image_for_canvas(self.canvas)
 
 
-    def on_frame_timing_data_select(self, event = None, should_stop_animation=True):
+    def on_frame_timing_data_select(self, event = None, should_stop_animation=True, should_update_data=True):
         if should_stop_animation:
             self.stop_animation()
-        # self.update_data_typed()
+        if should_update_data:
+            self.update_data_typed()
 
         selection = self.frame_timing_data_listbox.curselection() #event.widget.curselection()
         if not selection:
@@ -1179,6 +1212,9 @@ class ApplicationUI(tk.Tk):
 
 
     def on_animation_select(self, event = None):
+        self.stop_animation()
+        self.update_data_typed()
+
         self.animation_selection_thread_index += 1
         idx = self.animation_selection_thread_index
 
@@ -1215,7 +1251,6 @@ class ApplicationUI(tk.Tk):
 
         ## Critical section
         self.stop_animation()
-        self.update_data_typed()
 
         self.animation_listbox_label.config(text=f"Animation ({index})")
         self.dmgr.selected_animation_index = index
@@ -1226,7 +1261,7 @@ class ApplicationUI(tk.Tk):
 
         ## Select the first entry in the list to update timing data
         self.frame_timing_data_listbox.select_set(0)
-        self.on_frame_timing_data_select(should_stop_animation=False)
+        self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
 
         self.start_animation()
 
@@ -1257,7 +1292,7 @@ class ApplicationUI(tk.Tk):
 
             self.frame_timing_data_listbox.select_clear(0, tk.END)
             self.frame_timing_data_listbox.selection_set(self.current_frame_timing_data_index)
-            self.on_frame_timing_data_select(should_stop_animation=False)
+            self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
 
             self.create_image_for_canvas(self.canvas, current_frame_timing_data.frame_num)
             if len(current_animation.frame_timing_data) <= 1:

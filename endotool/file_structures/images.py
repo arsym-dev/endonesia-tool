@@ -1,6 +1,3 @@
-# TODO: Make sure the GUI works well with 10216 (has animations with frame_num=-1)
-# TODO: Clicking around and saving is causing fields to change. It's caused by self.update_data_typed()
-
 import struct
 from typing import List
 from PIL import Image

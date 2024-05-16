@@ -32,7 +32,8 @@ def unpack(fname_exo : str, dir_output : str):
         print('Output is not a folder.')
         return 2
 
-    # pos = 10547*2048 # First god
+    print(f'Output directory: {dir_output}')
+
     pos = 0
     while pos < TEXTURE_END:
         exo.seek(pos)
@@ -59,9 +60,10 @@ def unpack(fname_exo : str, dir_output : str):
             width = struct.unpack('<I', exo.read(4))[0]
             height = struct.unpack('<I', exo.read(4))[0]
 
-        png_fname = os.path.join(dir_output, f'{pos/2048:05.0f}-{pos + offset_to_start_of_data:08X}-{bitdepth:02d}' + '.png')
-        json_fname = os.path.join(dir_output, f'{pos/2048:05.0f}-{pos + offset_to_start_of_data:08X}-{bitdepth:02d}' + '.json')
-        print(f"Processing {png_fname}")
+        fname_base = f'{pos/2048:05.0f}-{pos + offset_to_start_of_data:08X}-{bitdepth:02d}'
+        png_fname = os.path.join(dir_output, fname_base + '.png')
+        json_fname = os.path.join(dir_output, fname_base + '.json')
+        print(f"{fname_base}.png")
 
         ## IMAGE PIXEL DATA
 
@@ -109,7 +111,7 @@ def unpack(fname_exo : str, dir_output : str):
         ## FINALIZE LOOP
         pos = next_pos
 
-    print("Unpacking images complete")
+    print("Image extraction complete")
 
 def rebuild(dir_input : str, fname_exo_in: str, fname_exo_out: str):
     exo = open(fname_exo_out, 'wb+')
