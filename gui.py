@@ -110,7 +110,6 @@ class ApplicationUI(tk.Tk):
         ## VARIABLES
         self.dmgr = DataManager()
         self.animation_thread : threading.Thread = None
-        self.animation_thread_lock = threading.Lock()
         self.animation_selection_thread_index = 0
         self.current_animation_tick = 0
         self.current_frame_timing_data_index = 0
@@ -162,7 +161,7 @@ class ApplicationUI(tk.Tk):
         #######################
         self.title('Endonesia Animation Editor')
         self.bind('<Return>', self.update_data_typed)
-        self.bind('<FocusOut>', self.update_data_typed)
+        # self.bind('<FocusOut>', self.update_data_typed)
         self.bind('<Configure>', self.resize)
 
         # ## LOAD FILE
@@ -278,7 +277,7 @@ class ApplicationUI(tk.Tk):
                 width=5,
                 font=("Helvatica", 12),
                 textvariable=self.var_frame_timing_data_num,
-                command=self.update_data_typed, #self.on_change_spinbox_frame_timing_data_num,
+                command=self.on_change_spinbox_frame_timing_data_num, #self.update_data_typed, #
             )
 
         self.spinboxes_frame_timing_data_duration = tk.Spinbox(
@@ -1060,15 +1059,16 @@ class ApplicationUI(tk.Tk):
         index = self.frame_timing_data_listbox.curselection()[0]
         frame_num = self.var_frame_timing_data_num.get()
 
-        ## Update animation frame with spinbox values
-        frame_timing_data = self.dmgr.selected_frame_timing_data
-        # frame_timing_data.duration = self.var_frame_timing_data_duration.get()
-        frame_timing_data.frame_num = frame_num
+        # ## Update animation frame with spinbox values
+        # frame_timing_data = self.dmgr.selected_frame_timing_data
+        # # frame_timing_data.duration = self.var_frame_timing_data_duration.get()
+        # frame_timing_data.frame_num = frame_num
 
         ## Update the listbox info
         self.frame_timing_data_listbox.delete(index)
         self.frame_timing_data_listbox.insert(index, frame_num)
         self.frame_timing_data_listbox.select_set(index)
+
         self.on_frame_timing_data_select(should_stop_animation=False)
         self.create_image_for_canvas(self.canvas, frame_num)
 
@@ -1103,7 +1103,9 @@ class ApplicationUI(tk.Tk):
 
         ## Interpolate the current frame from start transform to end transform
         current_animation = self.dmgr.selected_animation
-        current_frame_timing_data = current_animation.frame_timing_data[self.current_frame_timing_data_index] ## TODO: Sometimes this goes out of range when changing animation. Reset to zero?
+        if self.current_frame_timing_data_index >= len(current_animation.frame_timing_data):
+            self.current_frame_timing_data_index = 0
+        current_frame_timing_data = current_animation.frame_timing_data[self.current_frame_timing_data_index]
         frame_duration = current_frame_timing_data.frame_duration
 
         t = self.current_animation_tick / frame_duration
@@ -1387,12 +1389,6 @@ class ApplicationUI(tk.Tk):
 
 
     def on_animation_select(self, event = None):
-        ## TODO: Handle locks
-        acquired = self.animation_thread_lock.acquire(blocking=False)
-        if not acquired:
-            return ## TODO: breakpoint this and pray it never actually happens
-        # self.animation_thread_lock.acquire()
-
         self.update_data_typed()
 
         self.animation_selection_thread_index += 1
@@ -1423,41 +1419,46 @@ class ApplicationUI(tk.Tk):
         self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
         self.start_animation()
 
-        self.animation_thread_lock.release()
-
 
     def animation_loop(self):
         self.is_running_animation = True
         self.current_frame_timing_data_index = 0
+        prev_animation = None
+        prev_frame_timing_data = None
+
 
         while True:
             time.sleep(1/30)
 
-            if not self.is_running_animation or not hasattr(self.dmgr, "animations"):
+            if not hasattr(self.dmgr, "animations"):
                 continue
 
             ## Enter the critical section
-            acquired = self.animation_thread_lock.acquire(blocking=False)
-            if not acquired:
-                continue ## TODO: breakpoint this and pray it never actually happens
-
-            try:
-                current_animation = self.dmgr.selected_animation
-            except:
-                self.animation_thread_lock.release()
-                continue
+            current_animation = self.dmgr.selected_animation
+            specs = self.dmgr.selected_framedata.img_specs
 
             if self.current_frame_timing_data_index >= len(current_animation.frame_timing_data):
                 self.current_frame_timing_data_index = 0
             current_frame_timing_data = current_animation.frame_timing_data[self.current_frame_timing_data_index]
 
-            # self.frame_timing_data_listbox.select_clear(0, tk.END)
-            # self.frame_timing_data_listbox.selection_set(self.current_frame_timing_data_index)
-            self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
+            # Don't update the screen if it's the same frame
+            if not (current_animation == prev_animation and
+                    current_frame_timing_data == prev_frame_timing_data and
+                    specs.start_transform.rotation == specs.end_transform.rotation and
+                    specs.start_transform.offset.x == specs.end_transform.offset.x and
+                    specs.start_transform.offset.y == specs.end_transform.offset.y and
+                    specs.start_transform.scale.x == specs.end_transform.scale.x and
+                    specs.start_transform.scale.y == specs.end_transform.scale.y
+                ):
+                self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
+                self.create_image_for_canvas(self.canvas, current_frame_timing_data.frame_num)
 
-            self.create_image_for_canvas(self.canvas, current_frame_timing_data.frame_num)
+            prev_animation = current_animation
+            prev_frame_timing_data = current_frame_timing_data
 
-            # time.sleep(1/30)
+            if not self.is_running_animation:
+                continue
+
 
             self.current_animation_tick += 1
 
@@ -1469,8 +1470,12 @@ class ApplicationUI(tk.Tk):
                 if self.current_frame_timing_data_index >= len(current_animation.frame_timing_data):
                     self.current_frame_timing_data_index = 0
 
+                self.frame_timing_data_listbox_label.config(text=f"Frame ({current_frame_timing_data.frame_num})")
+                # index = self.frame_timing_data_listbox.curselection()[0]
+                self.frame_timing_data_listbox.select_clear(0, tk.END)
+                self.frame_timing_data_listbox.select_set(self.current_frame_timing_data_index)
+
             ## Exit the critical section
-            self.animation_thread_lock.release()
 
 
     def start_animation(self):
