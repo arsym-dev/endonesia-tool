@@ -1,3 +1,10 @@
+## TODO: Handle transitions on update_image() and create_image_for_canvas()
+## TODO: Handle animation stopping. At this point I think the loop should always run (with ways to accept changes from outside the loop/locks/whatever)
+## TODO: Sometimes the animation selection doesn't want to update the animation correctly
+## TODO: Frame selection no longer updating correctly
+## TODO: Sometimes pressing up/down on the animation select doesn't update the animation
+## TODO: Allow typing when animation playing
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 from PIL import Image, ImageTk
@@ -49,25 +56,24 @@ class DataManager(PackedImageInfo):
         specs = framedata.img_specs
         w = specs.crop_rect.right - specs.crop_rect.left
         h = specs.crop_rect.bottom - specs.crop_rect.top
-        if w <= 0 or h <= 0:
+        if w <= 0 or h <= 0 or framedata.frame_num < 0:
             return
 
         img = self.full_image.crop((specs.crop_rect.left, specs.crop_rect.top, specs.crop_rect.right, specs.crop_rect.bottom))
-        img = img.resize(
-            (
-                max(1, int(img.width*specs.scale.x/100.0)),
-                max(1, int(img.height*specs.scale.y/100.0))
-            ),
-            Image.LANCZOS)
-        img = img.rotate(specs.rotation)
-
-        if (framedata.frame_num) > -1:
-            self.images[framedata.frame_num] = img
+        self.images[framedata.frame_num] = img
 
 
     @property
     def selected_framedata(self) -> FrameImageData:
         return self.frame_image_data[self.selected_framedata_index]
+
+    @property
+    def next_selected_framedata(self) -> FrameImageData:
+        return self.frame_image_data[(self.selected_framedata_index+1)%len(self.frame_image_data)]
+
+    @property
+    def prev_selected_framedata(self) -> FrameImageData:
+        return self.frame_image_data[(self.selected_framedata_index-1)%len(self.frame_image_data)]
 
 
     @property
@@ -105,12 +111,10 @@ class ApplicationUI(tk.Tk):
         self.dmgr = DataManager()
         self.animation_thread : threading.Thread = None
         self.animation_thread_lock = threading.Lock()
-        self.animation_selection_lock = threading.Lock()
         self.animation_selection_thread_index = 0
-        self.animation_delayed_selection_lock = threading.Lock()
+        self.current_animation_tick = 0
         self.current_frame_timing_data_index = 0
         self.is_running_animation = False
-        self.animation_changed_timer : threading.Timer = None
 
         self.ini_config = configparser.ConfigParser()
         if os.path.exists("config.ini"):
@@ -309,19 +313,25 @@ class ApplicationUI(tk.Tk):
         spinbox_controls_frame = tk.Frame(main_frames[1])
 
         self.var_framedata_crop = [tk.IntVar() for _ in range(4)]
-        self.var_framedata_offset = [tk.IntVar() for _ in range(2)]
-        self.var_framedata_scale = [tk.IntVar() for _ in range(2)]
-        self.var_framedata_rotation = tk.IntVar()
+        self.var_framedata_start_offset = [tk.IntVar() for _ in range(2)]
+        self.var_framedata_start_scale = [tk.IntVar() for _ in range(2)]
+        self.var_framedata_start_rotation = tk.IntVar()
+        self.var_framedata_end_offset = [tk.IntVar() for _ in range(2)]
+        self.var_framedata_end_scale = [tk.IntVar() for _ in range(2)]
+        self.var_framedata_end_rotation = tk.IntVar()
         self.var_framedata_unknown = [tk.IntVar() for _ in range(3)]
 
         ## FRAME DATA - CROP
         frame = tk.Frame(spinbox_controls_frame)
-        frame.columnconfigure(0, weight=1)
-        frame.columnconfigure(0, weight=1)
-        frame.columnconfigure(0, weight=1)
+        # frame.columnconfigure(0, weight=1)
+        # frame.columnconfigure(0, weight=1)
+        # frame.columnconfigure(0, weight=1)
 
-        tk.Label(frame, text="X").grid(column=1, row=0)
-        tk.Label(frame, text="Y").grid(column=2, row=0)
+        tk.Button(frame, text='Copy previous frame', command=self.copy_previous_frame).grid(column=1, row=0, columnspan=2, sticky="nswe", padx=3, pady=3, ipadx=5)
+        tk.Button(frame, text='Copy next frame', command=self.copy_next_frame).grid(column=3, row=0, columnspan=2, sticky="nswe", padx=3, pady=3, ipadx=5)
+
+        tk.Label(frame, text="X").grid(column=1, row=1)
+        tk.Label(frame, text="Y").grid(column=2, row=1)
 
         self.spinboxes_crop = [tk.Spinbox(
                 frame,
@@ -335,69 +345,117 @@ class ApplicationUI(tk.Tk):
                 command=self.on_change_spinbox_framedata,
             ) for sb_index in range(len(self.var_framedata_crop))]
 
-        tk.Label(frame, text="Crop").grid(column=0, row=1, sticky='w')
+        tk.Label(frame, text="Crop").grid(column=0, row=2, sticky='w')
         for row in range(2):
-            self.spinboxes_crop[row*2].grid(column=1, row=row+1)
-            self.spinboxes_crop[row*2+1].grid(column=2, row=row+1)
+            self.spinboxes_crop[row*2].grid(column=1, row=row+2)
+            self.spinboxes_crop[row*2+1].grid(column=2, row=row+2)
 
+
+        ######################
+        tk.Label(frame, text="Transition Start").grid(column=1, row=4, columnspan=2)
+        tk.Label(frame, text="Transition End").grid(column=3, row=4, columnspan=2)
+        tk.Label(frame, text="X").grid(column=1, row=5)
+        tk.Label(frame, text="Y").grid(column=2, row=5)
+        tk.Label(frame, text="X").grid(column=3, row=5)
+        tk.Label(frame, text="Y").grid(column=4, row=5)
 
         ## FRAME DATA - OFFSET
-        self.spinboxes_offset = [tk.Spinbox(
+        tk.Label(frame, text="Offset").grid(column=0, row=6, sticky='w')
+
+        self.spinboxes_start_offset = [tk.Spinbox(
                 frame,
                 from_=-1000,
                 to=1000,
                 width=5,
                 font=("Helvatica", 12),
-                textvariable=self.var_framedata_offset[sb_index],
+                textvariable=self.var_framedata_start_offset[sb_index],
                 command=self.on_change_spinbox_framedata,
-            ) for sb_index in range(len(self.var_framedata_offset))]
+            ) for sb_index in range(len(self.var_framedata_start_offset))]
+        self.spinboxes_start_offset[0].grid(column=1, row=6)
+        self.spinboxes_start_offset[1].grid(column=2, row=6, pady=5)
 
-        tk.Label(frame, text="Offset").grid(column=0, row=3, sticky='w')
-        self.spinboxes_offset[0].grid(column=1, row=3)
-        self.spinboxes_offset[1].grid(column=2, row=3, pady=5)
+
+        self.spinboxes_end_offset = [tk.Spinbox(
+                frame,
+                from_=-1000,
+                to=1000,
+                width=5,
+                font=("Helvatica", 12),
+                textvariable=self.var_framedata_end_offset[sb_index],
+                command=self.on_change_spinbox_framedata,
+            ) for sb_index in range(len(self.var_framedata_end_offset))]
+        self.spinboxes_end_offset[0].grid(column=3, row=6)
+        self.spinboxes_end_offset[1].grid(column=4, row=6, pady=5)
 
         ## FRAME DATA - SCALE
-        self.spinboxes_scale = [tk.Spinbox(
+        tk.Label(frame, text="Scale").grid(column=0, row=7, sticky='w')
+
+        self.spinboxes_start_scale = [tk.Spinbox(
                 frame,
                 from_=-1000,
                 to=1000,
                 width=5,
                 font=("Helvatica", 12),
-                textvariable=self.var_framedata_scale[sb_index],
+                textvariable=self.var_framedata_start_scale[sb_index],
                 command=self.on_change_spinbox_framedata,
-            ) for sb_index in range(len(self.var_framedata_scale))]
+            ) for sb_index in range(len(self.var_framedata_start_scale))]
+        self.spinboxes_start_scale[0].grid(column=1, row=7)
+        self.spinboxes_start_scale[1].grid(column=2, row=7, pady=5)
 
-        tk.Label(frame, text="Scale").grid(column=0, row=4, sticky='w')
-        self.spinboxes_scale[0].grid(column=1, row=4)
-        self.spinboxes_scale[1].grid(column=2, row=4, pady=5)
+        self.spinboxes_end_scale = [tk.Spinbox(
+                frame,
+                from_=-1000,
+                to=1000,
+                width=5,
+                font=("Helvatica", 12),
+                textvariable=self.var_framedata_end_scale[sb_index],
+                command=self.on_change_spinbox_framedata,
+            ) for sb_index in range(len(self.var_framedata_end_scale))]
+        self.spinboxes_end_scale[0].grid(column=3, row=7)
+        self.spinboxes_end_scale[1].grid(column=4, row=7, pady=5)
 
         ## FRAME DATA - ROTATION
-        self.spinboxes_rotation = tk.Spinbox(
+        tk.Label(frame, text="Rotation").grid(column=0, row=8, sticky='w')
+
+        self.spinboxes_start_rotation = tk.Spinbox(
                 frame,
                 from_=-1000,
                 to=1000,
                 width=5,
                 font=("Helvatica", 12),
-                textvariable=self.var_framedata_rotation,
+                textvariable=self.var_framedata_start_rotation,
                 command=self.on_change_spinbox_framedata,
             )
+        self.spinboxes_start_rotation.grid(column=1, row=8, pady=5)
 
-        tk.Label(frame, text="Rotation").grid(column=0, row=5, sticky='w')
-        self.spinboxes_rotation.grid(column=1, row=5, pady=5)
-
-        ## FRAME DATA - UNKNOWN
-        self.spinboxes_unknown = [tk.Spinbox(
+        self.spinboxes_end_rotation = tk.Spinbox(
                 frame,
                 from_=-1000,
                 to=1000,
                 width=5,
                 font=("Helvatica", 12),
-                textvariable=self.var_framedata_unknown[sb_index],
+                textvariable=self.var_framedata_end_rotation,
                 command=self.on_change_spinbox_framedata,
-            ) for sb_index in range(len(self.var_framedata_unknown))]
+            )
+        self.spinboxes_end_rotation.grid(column=3, row=8, pady=5)
 
-        tk.Label(frame, text="Rotation").grid(column=0, row=5, sticky='w')
-        self.spinboxes_rotation.grid(column=1, row=5, pady=5)
+        ## FRAME DATA - BUTTONS
+        tk.Button(frame, text='Copy end transition', command=self.copy_end_transition).grid(column=1, row=9, columnspan=2, sticky="nswe", padx=3, pady=3, ipadx=5)
+        tk.Button(frame, text='Copy start transition', command=self.copy_start_transition).grid(column=3, row=9, columnspan=2, sticky="nswe", padx=3, pady=3, ipadx=5)
+
+        # ## FRAME DATA - UNKNOWN
+        # self.spinboxes_unknown = [tk.Spinbox(
+        #         frame,
+        #         from_=-1000,
+        #         to=1000,
+        #         width=5,
+        #         font=("Helvatica", 12),
+        #         textvariable=self.var_framedata_unknown[sb_index],
+        #         command=self.on_change_spinbox_framedata,
+        #     ) for sb_index in range(len(self.var_framedata_unknown))]
+
+        # tk.Label(frame, text="Rotation").grid(column=0, row=5, sticky='w')
+        # self.spinboxes_start_rotation.grid(column=1, row=5, pady=5)
 
 
         frame.pack()
@@ -430,6 +488,10 @@ class ApplicationUI(tk.Tk):
 
         # for mf in main_frames:
         #     mf.pack()
+
+        ## Start animation thread
+        self.animation_thread = threading.Thread(target=self.animation_loop)
+        self.animation_thread.start()
 
 
     def save_ini_config(self):
@@ -906,7 +968,6 @@ class ApplicationUI(tk.Tk):
 
 
     def on_framedata_select(self, event = None):
-        self.stop_animation()
         self.update_data_typed()
 
         selection = self.framedata_listbox.curselection() #event.widget.curselection()
@@ -925,11 +986,16 @@ class ApplicationUI(tk.Tk):
         self.var_framedata_crop[1].set("")
         self.var_framedata_crop[2].set("")
         self.var_framedata_crop[3].set("")
-        self.var_framedata_offset[0].set("")
-        self.var_framedata_offset[1].set("")
-        self.var_framedata_scale[0].set("")
-        self.var_framedata_scale[1].set("")
-        self.var_framedata_rotation.set("")
+        self.var_framedata_start_offset[0].set("")
+        self.var_framedata_start_offset[1].set("")
+        self.var_framedata_start_scale[0].set("")
+        self.var_framedata_start_scale[1].set("")
+        self.var_framedata_start_rotation.set("")
+        self.var_framedata_end_offset[0].set("")
+        self.var_framedata_end_offset[1].set("")
+        self.var_framedata_end_scale[0].set("")
+        self.var_framedata_end_scale[1].set("")
+        self.var_framedata_end_rotation.set("")
         self.var_framedata_unknown[0].set("")
         self.var_framedata_unknown[1].set("")
         self.var_framedata_unknown[2].set("")
@@ -949,11 +1015,16 @@ class ApplicationUI(tk.Tk):
         self.var_framedata_crop[1].set(specs.crop_rect.top)
         self.var_framedata_crop[2].set(specs.crop_rect.right)
         self.var_framedata_crop[3].set(specs.crop_rect.bottom)
-        self.var_framedata_offset[0].set(specs.offset.x)
-        self.var_framedata_offset[1].set(specs.offset.y)
-        self.var_framedata_scale[0].set(specs.scale.x)
-        self.var_framedata_scale[1].set(specs.scale.y)
-        self.var_framedata_rotation.set(specs.rotation)
+        self.var_framedata_start_offset[0].set(specs.start_transform.offset.x)
+        self.var_framedata_start_offset[1].set(specs.start_transform.offset.y)
+        self.var_framedata_start_scale[0].set(specs.start_transform.scale.x)
+        self.var_framedata_start_scale[1].set(specs.start_transform.scale.y)
+        self.var_framedata_start_rotation.set(specs.start_transform.rotation)
+        self.var_framedata_end_offset[0].set(specs.end_transform.offset.x)
+        self.var_framedata_end_offset[1].set(specs.end_transform.offset.y)
+        self.var_framedata_end_scale[0].set(specs.end_transform.scale.x)
+        self.var_framedata_end_scale[1].set(specs.end_transform.scale.y)
+        self.var_framedata_end_rotation.set(specs.end_transform.rotation)
         self.var_framedata_unknown[0].set(specs.unknown1)
         self.var_framedata_unknown[1].set(specs.unknown2)
         self.var_framedata_unknown[2].set(specs.unknown3)
@@ -1026,10 +1097,24 @@ class ApplicationUI(tk.Tk):
         self.populate_spinboxes(framedata)
 
         img = self.dmgr.images[framedata.frame_num]
-        # img = framedata.image
 
         if img is None:
             return None
+
+        ## Interpolate the current frame from start transform to end transform
+        current_animation = self.dmgr.selected_animation
+        current_frame_timing_data = current_animation.frame_timing_data[self.current_frame_timing_data_index] ## TODO: Sometimes this goes out of range when changing animation. Reset to zero?
+        frame_duration = current_frame_timing_data.frame_duration
+
+        t = self.current_animation_tick / frame_duration
+
+        img = img.resize(
+            (
+                max(1, int(img.width  * (framedata.img_specs.start_transform.scale.x*(1-t)+framedata.img_specs.end_transform.scale.x*(t))/100.0)),
+                max(1, int(img.height * (framedata.img_specs.start_transform.scale.y*(1-t)+framedata.img_specs.end_transform.scale.y*(t))/100.0))
+            ),
+            Image.LANCZOS)
+        img = img.rotate(framedata.img_specs.start_transform.rotation*(1-t)+framedata.img_specs.end_transform.rotation*(t))
 
         canvas_scale = self.var_canvas_scale.get()/100.0
 
@@ -1042,8 +1127,8 @@ class ApplicationUI(tk.Tk):
         ## Draw the image
         photo = ImageTk.PhotoImage(img.resize((int(img.width * canvas_scale), int(img.height * canvas_scale))))
         canvas.create_image(
-            int(self.canvas.width/2)+framedata.img_specs.offset.x*canvas_scale,
-            int(self.canvas.height/2)+framedata.img_specs.offset.y*canvas_scale,
+            int(self.canvas.width/2  + (framedata.img_specs.start_transform.offset.x*(1-t)+framedata.img_specs.end_transform.offset.x*(t)) * canvas_scale),
+            int(self.canvas.height/2 + (framedata.img_specs.start_transform.offset.y*(1-t)+framedata.img_specs.end_transform.offset.y*(t)) * canvas_scale),
             image=photo,
             anchor='nw'
             )
@@ -1051,9 +1136,131 @@ class ApplicationUI(tk.Tk):
 
 
     def resize(self, event):
+        self.current_frame_timing_data_index = 0
+
         ## Redraw the canvas on resize
         if hasattr(self, 'canvas') and hasattr(self, 'dmgr') and hasattr(self.dmgr, 'frame_image_data'):
             self.create_image_for_canvas(self.canvas)
+
+    def copy_previous_frame(self, *args, **kwargs):
+        framedata = self.dmgr.selected_framedata
+        specs = framedata.img_specs
+
+        prev_framedata = self.dmgr.prev_selected_framedata
+        prev_specs = prev_framedata.img_specs
+
+        specs.crop_rect.bottom = prev_specs.crop_rect.bottom
+        specs.crop_rect.top = prev_specs.crop_rect.top
+        specs.crop_rect.left = prev_specs.crop_rect.left
+        specs.crop_rect.right = prev_specs.crop_rect.right
+        specs.start_transform.rotation = prev_specs.start_transform.rotation
+        specs.start_transform.offset.x = prev_specs.start_transform.offset.x
+        specs.start_transform.offset.y = prev_specs.start_transform.offset.y
+        specs.start_transform.scale.x = prev_specs.start_transform.scale.x
+        specs.start_transform.scale.y = prev_specs.start_transform.scale.y
+        specs.end_transform.rotation = prev_specs.end_transform.rotation
+        specs.end_transform.offset.x = prev_specs.end_transform.offset.x
+        specs.end_transform.offset.y = prev_specs.end_transform.offset.y
+        specs.end_transform.scale.x = prev_specs.end_transform.scale.x
+        specs.end_transform.scale.y = prev_specs.end_transform.scale.y
+        specs.unknown1 = prev_specs.unknown1
+        specs.unknown2 = prev_specs.unknown2
+        specs.unknown3 = prev_specs.unknown3
+
+        self.var_framedata_crop[0].set(specs.crop_rect.bottom)
+        self.var_framedata_crop[1].set(specs.crop_rect.top)
+        self.var_framedata_crop[2].set(specs.crop_rect.left)
+        self.var_framedata_crop[3].set(specs.crop_rect.right)
+        self.var_framedata_start_rotation.set(specs.start_transform.rotation)
+        self.var_framedata_start_offset[0].set(specs.start_transform.offset.x)
+        self.var_framedata_start_offset[1].set(specs.start_transform.offset.y)
+        self.var_framedata_start_scale[0].set(specs.start_transform.scale.x)
+        self.var_framedata_start_scale[1].set(specs.start_transform.scale.y)
+        self.var_framedata_end_rotation.set(specs.end_transform.rotation)
+        self.var_framedata_end_offset[0].set(specs.end_transform.offset.x)
+        self.var_framedata_end_offset[1].set(specs.end_transform.offset.y)
+        self.var_framedata_end_scale[0].set(specs.end_transform.scale.x)
+        self.var_framedata_end_scale[1].set(specs.end_transform.scale.y)
+        self.var_framedata_unknown[0].set(specs.unknown1)
+        self.var_framedata_unknown[1].set(specs.unknown2)
+        self.var_framedata_unknown[2].set(specs.unknown3)
+
+
+    def copy_next_frame(self, *args, **kwargs):
+        framedata = self.dmgr.selected_framedata
+        specs = framedata.img_specs
+
+        next_framedata = self.dmgr.next_selected_framedata
+        next_specs = next_framedata.img_specs
+
+        specs.crop_rect.bottom = next_specs.crop_rect.bottom
+        specs.crop_rect.top = next_specs.crop_rect.top
+        specs.crop_rect.left = next_specs.crop_rect.left
+        specs.crop_rect.right = next_specs.crop_rect.right
+        specs.start_transform.rotation = next_specs.start_transform.rotation
+        specs.start_transform.offset.x = next_specs.start_transform.offset.x
+        specs.start_transform.offset.y = next_specs.start_transform.offset.y
+        specs.start_transform.scale.x = next_specs.start_transform.scale.x
+        specs.start_transform.scale.y = next_specs.start_transform.scale.y
+        specs.end_transform.rotation = next_specs.end_transform.rotation
+        specs.end_transform.offset.x = next_specs.end_transform.offset.x
+        specs.end_transform.offset.y = next_specs.end_transform.offset.y
+        specs.end_transform.scale.x = next_specs.end_transform.scale.x
+        specs.end_transform.scale.y = next_specs.end_transform.scale.y
+        specs.unknown1 = next_specs.unknown1
+        specs.unknown2 = next_specs.unknown2
+        specs.unknown3 = next_specs.unknown3
+
+        self.var_framedata_crop[0].set(specs.crop_rect.bottom)
+        self.var_framedata_crop[1].set(specs.crop_rect.top)
+        self.var_framedata_crop[2].set(specs.crop_rect.left)
+        self.var_framedata_crop[3].set(specs.crop_rect.right)
+        self.var_framedata_start_rotation.set(specs.start_transform.rotation)
+        self.var_framedata_start_offset[0].set(specs.start_transform.offset.x)
+        self.var_framedata_start_offset[1].set(specs.start_transform.offset.y)
+        self.var_framedata_start_scale[0].set(specs.start_transform.scale.x)
+        self.var_framedata_start_scale[1].set(specs.start_transform.scale.y)
+        self.var_framedata_end_rotation.set(specs.end_transform.rotation)
+        self.var_framedata_end_offset[0].set(specs.end_transform.offset.x)
+        self.var_framedata_end_offset[1].set(specs.end_transform.offset.y)
+        self.var_framedata_end_scale[0].set(specs.end_transform.scale.x)
+        self.var_framedata_end_scale[1].set(specs.end_transform.scale.y)
+        self.var_framedata_unknown[0].set(specs.unknown1)
+        self.var_framedata_unknown[1].set(specs.unknown2)
+        self.var_framedata_unknown[2].set(specs.unknown3)
+
+
+    def copy_end_transition(self, *args, **kwargs):
+        framedata = self.dmgr.selected_framedata
+        specs = framedata.img_specs
+
+        specs.start_transform.rotation = specs.end_transform.rotation
+        specs.start_transform.offset.x = specs.end_transform.offset.x
+        specs.start_transform.offset.y = specs.end_transform.offset.y
+        specs.start_transform.scale.x = specs.end_transform.scale.x
+        specs.start_transform.scale.y = specs.end_transform.scale.y
+
+        self.var_framedata_start_rotation.set(specs.start_transform.rotation)
+        self.var_framedata_start_offset[0].set(specs.start_transform.offset.x)
+        self.var_framedata_start_offset[1].set(specs.start_transform.offset.y)
+        self.var_framedata_start_scale[0].set(specs.start_transform.scale.x)
+        self.var_framedata_start_scale[1].set(specs.start_transform.scale.y)
+
+    def copy_start_transition(self, *args, **kwargs):
+        framedata = self.dmgr.selected_framedata
+        specs = framedata.img_specs
+
+        specs.end_transform.rotation = specs.start_transform.rotation
+        specs.end_transform.offset.x = specs.start_transform.offset.x
+        specs.end_transform.offset.y = specs.start_transform.offset.y
+        specs.end_transform.scale.x = specs.start_transform.scale.x
+        specs.end_transform.scale.y = specs.start_transform.scale.y
+
+        self.var_framedata_end_rotation.set(specs.end_transform.rotation)
+        self.var_framedata_end_offset[0].set(specs.end_transform.offset.x)
+        self.var_framedata_end_offset[1].set(specs.end_transform.offset.y)
+        self.var_framedata_end_scale[0].set(specs.end_transform.scale.x)
+        self.var_framedata_end_scale[1].set(specs.end_transform.scale.y)
 
 
     def update_data_typed(self, event=None, *args, **kwargs):
@@ -1080,10 +1287,10 @@ class ApplicationUI(tk.Tk):
         self.var_framedata_crop[2].set(right)
         self.var_framedata_crop[3].set(bottom)
 
-        w = right-left
-        h = bottom-top
-        if w <= 0 or h <= 0:
-            return
+        # w = right-left
+        # h = bottom-top
+        # if w <= 0 or h <= 0:
+        #     return
 
         ## Update frame data with spinbox values
         framedata = self.dmgr.selected_framedata
@@ -1093,11 +1300,16 @@ class ApplicationUI(tk.Tk):
         specs.crop_rect.top = top
         specs.crop_rect.left = left
         specs.crop_rect.right = right
-        specs.rotation = self.var_framedata_rotation.get()
-        specs.offset.x = self.var_framedata_offset[0].get()
-        specs.offset.y = self.var_framedata_offset[1].get()
-        specs.scale.x = self.var_framedata_scale[0].get()
-        specs.scale.y = self.var_framedata_scale[1].get()
+        specs.start_transform.rotation = self.var_framedata_start_rotation.get()
+        specs.start_transform.offset.x = self.var_framedata_start_offset[0].get()
+        specs.start_transform.offset.y = self.var_framedata_start_offset[1].get()
+        specs.start_transform.scale.x = self.var_framedata_start_scale[0].get()
+        specs.start_transform.scale.y = self.var_framedata_start_scale[1].get()
+        specs.end_transform.rotation = self.var_framedata_end_rotation.get()
+        specs.end_transform.offset.x = self.var_framedata_end_offset[0].get()
+        specs.end_transform.offset.y = self.var_framedata_end_offset[1].get()
+        specs.end_transform.scale.x = self.var_framedata_end_scale[0].get()
+        specs.end_transform.scale.y = self.var_framedata_end_scale[1].get()
         specs.unknown1 = self.var_framedata_unknown[0].get()
         specs.unknown2 = self.var_framedata_unknown[1].get()
         specs.unknown3 = self.var_framedata_unknown[2].get()
@@ -1106,6 +1318,7 @@ class ApplicationUI(tk.Tk):
         ###################
         ## FRAME TIMING
         ###################
+        index = None
         if len(self.frame_timing_data_listbox.curselection()) > 0:
             index = self.frame_timing_data_listbox.curselection()[0]
             frame_num = self.var_frame_timing_data_num.get()
@@ -1119,7 +1332,7 @@ class ApplicationUI(tk.Tk):
         ## We got here by pressing enter, update the image
         if event is not None:
 
-            if self.notebook.index(self.notebook.select()) == 0:
+            if self.notebook.index(self.notebook.select()) == 0 and index is not None:
                 ## On the animation tab, use the frame_num
 
                 ## Update the listbox info
@@ -1133,52 +1346,14 @@ class ApplicationUI(tk.Tk):
                 ## If on the frames tab, just use the current frame
                 self.create_image_for_canvas(self.canvas)
 
-        # self.update_framedata_preview()
+            return
+
+        self.create_image_for_canvas(self.canvas)
 
 
     def update_framedata_preview(self, unknown=None):
         if not self.dmgr.full_image:
             return
-
-        # try:
-        #     left, top, right, bottom = [cv.get() for cv in self.var_framedata_crop]
-        # except (TypeError, tk.TclError):
-        #     ## Inputs aren't right, just ignore them
-        #     return
-
-        # width, height = self.dmgr.full_image.size
-        # left = max(0, min(left, right))
-        # top = max(0, min(top, bottom))
-        # right = max(left, min(right, width))
-        # bottom = max(top, min(bottom, height))
-
-        # self.var_framedata_crop[0].set(left)
-        # self.var_framedata_crop[1].set(top)
-        # self.var_framedata_crop[2].set(right)
-        # self.var_framedata_crop[3].set(bottom)
-
-        # w = right-left
-        # h = bottom-top
-        # if w <= 0 or h <= 0:
-        #     return
-
-        # ## Update frame data with spinbox values
-        # framedata = self.dmgr.selected_framedata
-        # specs = framedata.img_specs
-
-        # specs.crop_rect.bottom = bottom
-        # specs.crop_rect.top = top
-        # specs.crop_rect.left = left
-        # specs.crop_rect.right = right
-        # specs.rotation = self.var_framedata_rotation.get()
-        # specs.offset.x = self.var_framedata_offset[0].get()
-        # specs.offset.y = self.var_framedata_offset[1].get()
-        # specs.scale.x = self.var_framedata_scale[0].get()
-        # specs.scale.y = self.var_framedata_scale[1].get()
-        # specs.unknown1 = self.var_framedata_unknown[0].get()
-        # specs.unknown2 = self.var_framedata_unknown[1].get()
-        # specs.unknown3 = self.var_framedata_unknown[2].get()
-        # # self.dmgr.update_image(framedata)
 
         self.update_data_typed()
         self.create_image_for_canvas(self.canvas)
@@ -1212,16 +1387,18 @@ class ApplicationUI(tk.Tk):
 
 
     def on_animation_select(self, event = None):
-        self.stop_animation()
+        ## TODO: Handle locks
+        acquired = self.animation_thread_lock.acquire(blocking=False)
+        if not acquired:
+            return ## TODO: breakpoint this and pray it never actually happens
+        # self.animation_thread_lock.acquire()
+
         self.update_data_typed()
 
         self.animation_selection_thread_index += 1
         idx = self.animation_selection_thread_index
 
-        self.animation_selection_lock.acquire()
-
         if idx != self.animation_selection_thread_index:
-            self.animation_selection_lock.release()
             return
 
         selection = self.animations_listbox.curselection() #event.widget.curselection()
@@ -1230,27 +1407,9 @@ class ApplicationUI(tk.Tk):
 
         index = selection[0]
 
-        ## This callback is queued up multiple times if you change the animation quickly.
-        ## I need to ONLY stop the animation for the latest item in the queue and ignore everything that came before
-        if self.animation_changed_timer is not None:
-            self.animation_changed_timer.cancel()
-
         ## Render the first frame as a preview
         # self.is_running_animation = False
         # self.create_image_for_canvas(self.canvas, self.dmgr.animations[index].frame_timing_data[0].frame_num)
-
-        self.animation_changed_timer = threading.Timer(0.1, self.delayed_on_animation_select, [index])
-        self.animation_changed_timer.start()
-
-        self.animation_selection_lock.release()
-
-
-    def delayed_on_animation_select(self, index):
-        ## Enter the critical section
-        self.animation_delayed_selection_lock.acquire()
-
-        ## Critical section
-        self.stop_animation()
 
         self.animation_listbox_label.config(text=f"Animation ({index})")
         self.dmgr.selected_animation_index = index
@@ -1262,87 +1421,65 @@ class ApplicationUI(tk.Tk):
         ## Select the first entry in the list to update timing data
         self.frame_timing_data_listbox.select_set(0)
         self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
-
         self.start_animation()
 
-        ## Exit the critical section
-        # self.animation_thread_lock.release()
-        self.animation_changed_timer = None
-
-        self.animation_delayed_selection_lock.release()
+        self.animation_thread_lock.release()
 
 
     def animation_loop(self):
         self.is_running_animation = True
         self.current_frame_timing_data_index = 0
 
-        ## Enter the critical section
-        self.animation_thread_lock.acquire()
+        while True:
+            time.sleep(1/30)
 
-        ## Critical section
-        while self.is_running_animation:
-            current_animation = self.dmgr.selected_animation
+            if not self.is_running_animation or not hasattr(self.dmgr, "animations"):
+                continue
+
+            ## Enter the critical section
+            acquired = self.animation_thread_lock.acquire(blocking=False)
+            if not acquired:
+                continue ## TODO: breakpoint this and pray it never actually happens
+
+            try:
+                current_animation = self.dmgr.selected_animation
+            except:
+                self.animation_thread_lock.release()
+                continue
+
             if self.current_frame_timing_data_index >= len(current_animation.frame_timing_data):
                 self.current_frame_timing_data_index = 0
             current_frame_timing_data = current_animation.frame_timing_data[self.current_frame_timing_data_index]
-            # self.dmgr.selected_framedata_index = frame_num
 
-            # framedata = self.dmgr.frame_image_data[current_frame_timing_data.frame_num]
-            # self.dmgr.update_image(framedata)
-
-            self.frame_timing_data_listbox.select_clear(0, tk.END)
-            self.frame_timing_data_listbox.selection_set(self.current_frame_timing_data_index)
+            # self.frame_timing_data_listbox.select_clear(0, tk.END)
+            # self.frame_timing_data_listbox.selection_set(self.current_frame_timing_data_index)
             self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
 
             self.create_image_for_canvas(self.canvas, current_frame_timing_data.frame_num)
-            if len(current_animation.frame_timing_data) <= 1:
-                break
 
-            time.sleep(current_frame_timing_data.frame_duration/30)
+            # time.sleep(1/30)
 
-            self.current_frame_timing_data_index += 1
-            if self.current_frame_timing_data_index >= len(current_animation.frame_timing_data):
-                self.current_frame_timing_data_index = 0
+            self.current_animation_tick += 1
 
-        ## Exit the critical section
-        self.animation_thread_lock.release()
+            # Move to the next frame once the current frame is over
+            if self.current_animation_tick >= current_frame_timing_data.frame_duration:
+                self.current_animation_tick = 0
+
+                self.current_frame_timing_data_index += 1
+                if self.current_frame_timing_data_index >= len(current_animation.frame_timing_data):
+                    self.current_frame_timing_data_index = 0
+
+            ## Exit the critical section
+            self.animation_thread_lock.release()
 
 
     def start_animation(self):
-        self.stop_animation()
-        self.animation_thread = None
-        self.animation_thread = threading.Thread(target=self.animation_loop)
-        self.animation_thread.start()
+        self.is_running_animation = True
 
 
     def stop_animation(self):
+        self.current_animation_tick = 0
         self.is_running_animation = False
-
-        if self.animation_thread is None:
-            return
-
-        for i in range(50):
-            if self.animation_thread.is_alive():
-                time.sleep(0.01)
-            else:
-                return
-
-        print("Did NOT stop animation. Forcing shutdown")
-        try:
-            self.animation_thread._stop()
-        except:
-            pass
-        self.animation_thread = None
-
-        # i = 0
-        # while self.animation_thread and self.animation_thread.is_alive():
-        #     i += 1
-        #     print(f"Timing out: {i}")
-        #     self.animation_thread.join(timeout=0.1)
-
-        # # if self.animation_thread and self.animation_thread.is_alive():
-        # #     self.animation_thread.join()
-
 
 
 if __name__ == "__main__":

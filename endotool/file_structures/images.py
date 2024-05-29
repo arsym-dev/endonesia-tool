@@ -123,16 +123,30 @@ class PackedImageInfo:
                 right = readUInt16(data, offset_to_img_spec + 0x0A),
                 bottom = readUInt16(data, offset_to_img_spec + 0x0C),
             )
-            img_spec.offset = Vector2(
+            ## Start transform
+            img_spec.start_transform = ImageSpecificationsTransform()
+            img_spec.start_transform.offset = Vector2(
                 x = readInt16(data, offset_to_img_spec + 0x0E),
                 y = readInt16(data, offset_to_img_spec + 0x10),
             )
-            img_spec.rotation = readInt16(data, offset_to_img_spec + 0x12)
-            img_spec.scale = Vector2(
+            img_spec.start_transform.rotation = readInt16(data, offset_to_img_spec + 0x12)
+            img_spec.start_transform.scale = Vector2(
                 x = readUInt16(data, offset_to_img_spec + 0x14),
                 y = readUInt16(data, offset_to_img_spec + 0x16),
             )
-            img_spec.unknown_remaining = data[offset_to_img_spec + 0x18 : offset_to_img_spec + size_of_img_spec]
+            ## End transform
+            img_spec.end_transform = ImageSpecificationsTransform()
+            img_spec.end_transform.offset = Vector2(
+                x = readInt16(data, offset_to_img_spec + 0x18),
+                y = readInt16(data, offset_to_img_spec + 0x1A),
+            )
+            img_spec.end_transform.rotation = readInt16(data, offset_to_img_spec + 0x1C)
+            img_spec.end_transform.scale = Vector2(
+                x = readUInt16(data, offset_to_img_spec + 0x1E),
+                y = readUInt16(data, offset_to_img_spec + 0x20),
+            )
+
+            img_spec.unknown_remaining = data[offset_to_img_spec + 0x22 : offset_to_img_spec + size_of_img_spec]
 
         self.offset_to_frame_data = readUInt32(data, self.offset_to_animations_header + 0x04)
 
@@ -483,17 +497,15 @@ class ImageSpecifications:
         self.unknown2: int
         self.unknown3: int
         self.crop_rect: Rect
-        self.offset: Vector2
-        self.rotation: int
-        self.scale: Vector2
+        self.start_transform: ImageSpecificationsTransform
+        self.end_transform: ImageSpecificationsTransform
         self.unknown_remaining: bytes
 
     def serialize(self):
         return {
             'crop_rect': self.crop_rect.serialize(),
-            'offset': self.offset.serialize(),
-            'rotation': self.rotation,
-            'scale': self.scale.serialize(),
+            'start_transform': self.start_transform.serialize(),
+            'end_transform': self.end_transform.serialize(),
             'unknown1': self.unknown1,
             'unknown2': self.unknown2,
             'unknown3': self.unknown3,
@@ -504,16 +516,35 @@ class ImageSpecifications:
     def deserialize(self, data):
         self.crop_rect = Rect()
         self.crop_rect.deserialize(data['crop_rect'])
-        self.offset = Vector2()
-        self.offset.deserialize(data['offset'])
-        self.rotation = data['rotation']
-        self.scale = Vector2()
-        self.scale.deserialize(data['scale'])
+        self.start_transform = ImageSpecificationsTransform()
+        self.start_transform.deserialize(data['start_transform'])
+        self.end_transform = ImageSpecificationsTransform()
+        self.end_transform.deserialize(data['end_transform'])
         self.unknown1 = data['unknown1']
         self.unknown2 = data['unknown2']
         self.unknown3 = data['unknown3']
         self.unknown_remaining = bytes.fromhex(data['unknown_remaining'])
         # self.unknown_remaining = bytes(data['unknown_remaining'])
+
+class ImageSpecificationsTransform:
+    def __init__(self) -> None:
+        self.offset: Vector2
+        self.rotation: int
+        self.scale: Vector2
+
+    def serialize(self):
+        return {
+            'offset': self.offset.serialize(),
+            'rotation': self.rotation,
+            'scale': self.scale.serialize(),
+        }
+
+    def deserialize(self, data):
+        self.offset = Vector2()
+        self.offset.deserialize(data['offset'])
+        self.rotation = data['rotation']
+        self.scale = Vector2()
+        self.scale.deserialize(data['scale'])
 
 class Rect:
     def __init__(self, left: int = 0, top: int = 0, right: int = 0, bottom: int = 0) -> None:
