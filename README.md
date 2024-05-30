@@ -21,6 +21,8 @@ This tool does not provide the ISO for this game. It will not be provided for yo
   - [Image and Animation Extraction](#image-and-animation-extraction)
   - [Image Editing](#image-editing)
   - [Animation Editing](#animation-editing)
+    - [Parameters](#parameters)
+    - [Buttons](#buttons)
   - [Image and Animation Rebuilding](#image-and-animation-rebuilding)
 - [4. Rebuild ISO](#4-rebuild-iso)
   - [Image Formats](#image-formats)
@@ -161,17 +163,30 @@ Animation data is stored within JSON files.
 4. Press `File > Save Animation JSON` or press `Ctrl + S`.
 
 <p align="center">
-<img src="assets/animation_editor.png">
+<img src="img/animation_editor.png">
 </p>
 
-| Term | Description |
-| ---- | ----------- |
+Each frame of animation has a "Start" state and an "End" state. If the two states are the same, then the frame will be a single static image. If the states differ, then the cropped region will transition (linear interpolation) from the start state to the end state. This can be used to create smooth rotations, sliding animations, and so on.
+
+### Parameters
+| Parameter | Description |
+| --------- | ----------- |
 | Frame Num | The index for the current frame of animation. |
 | Frame Duration | How long the current frame will be displayed. The game runs at 30fps, so one tick of duration is 33.3 milliseconds.
 | Crop | The top left and bottom right coordinates that define the crop rectangle of the current frame
 | Offset | Offset to apply to the cropped region. This moves the image in-game. The center of the dotted black lines indicates the origin (0, 0) |
 | Scale | How much to scale the cropped region. 100% by default.
 | Rotation | Rotation in degrees to apply to the cropped region
+
+### Buttons
+| Button | Description |
+| ------ | ----------- |
+| Start | Start the animation |
+| Stop | Stop the animation |
+| Copy previous frame | Copy all values from the preceding frame (including crop and start/end states) |
+| Copy next frame | Copy all values from the following frame (including crop and start/end states) |
+| Copy end transition | Copy the values of the ending state into the starting state (offset, scale, rotation) |
+| Copy start transition | Copy the values of the starting state into the ending state (offset, scale, rotation) |
 
 ## Image and Animation Rebuilding
 | Program  | Command |
@@ -188,7 +203,7 @@ You will need cdvd2iml5.30 to create the ISO. You can download it from here:
 Run `cdvd2iml5.30.msi` and install it. Once it's installed, run it from the start menu.
 
 <p align="center">
-<img src="assets/rebuilding_iso.png">
+<img src="img/rebuilding_iso.png">
 </p>
 
 1. Move the files `endonesia.iml` and `endonesia.ims` from the `assets/` folder and put them in your game folder
