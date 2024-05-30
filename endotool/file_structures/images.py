@@ -239,11 +239,16 @@ class PackedImageInfo:
             temp_bytes += createInt16(specs.crop_rect.top)
             temp_bytes += createInt16(specs.crop_rect.right)
             temp_bytes += createInt16(specs.crop_rect.bottom)
-            temp_bytes += createInt16(specs.offset.x)
-            temp_bytes += createInt16(specs.offset.y)
-            temp_bytes += createInt16(specs.rotation)
-            temp_bytes += createInt16(specs.scale.x)
-            temp_bytes += createInt16(specs.scale.y)
+            temp_bytes += createInt16(specs.start_transform.offset.x)
+            temp_bytes += createInt16(specs.start_transform.offset.y)
+            temp_bytes += createInt16(specs.start_transform.rotation)
+            temp_bytes += createInt16(specs.start_transform.scale.x)
+            temp_bytes += createInt16(specs.start_transform.scale.y)
+            temp_bytes += createInt16(specs.end_transform.offset.x)
+            temp_bytes += createInt16(specs.end_transform.offset.y)
+            temp_bytes += createInt16(specs.end_transform.rotation)
+            temp_bytes += createInt16(specs.end_transform.scale.x)
+            temp_bytes += createInt16(specs.end_transform.scale.y)
             temp_bytes += specs.unknown_remaining
 
             # if self.bits == 32:

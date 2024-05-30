@@ -1082,7 +1082,7 @@ class ApplicationUI(tk.Tk):
         frame_timing_data.frame_num = self.var_frame_timing_data_num.get()
 
 
-    def create_image_for_canvas(self, canvas: tk.Canvas, frame_num: int = None):
+    def create_image_for_canvas(self, canvas: tk.Canvas, frame_num: int = None, populate_spinboxes: bool = True):
         if frame_num is None:
             framedata = self.dmgr.selected_framedata
         elif frame_num > -1:
@@ -1094,7 +1094,8 @@ class ApplicationUI(tk.Tk):
             return None
 
         self.dmgr.update_image(framedata)
-        self.populate_spinboxes(framedata)
+        if populate_spinboxes:
+            self.populate_spinboxes(framedata)
 
         img = self.dmgr.images[framedata.frame_num]
 
@@ -1433,6 +1434,9 @@ class ApplicationUI(tk.Tk):
             if not hasattr(self.dmgr, "animations"):
                 continue
 
+            if not self.is_running_animation:
+                continue
+
             ## Enter the critical section
             current_animation = self.dmgr.selected_animation
             specs = self.dmgr.selected_framedata.img_specs
@@ -1441,24 +1445,28 @@ class ApplicationUI(tk.Tk):
                 self.current_frame_timing_data_index = 0
             current_frame_timing_data = current_animation.frame_timing_data[self.current_frame_timing_data_index]
 
-            # Don't update the screen if it's the same frame
-            if not (current_animation == prev_animation and
-                    current_frame_timing_data == prev_frame_timing_data and
-                    specs.start_transform.rotation == specs.end_transform.rotation and
-                    specs.start_transform.offset.x == specs.end_transform.offset.x and
-                    specs.start_transform.offset.y == specs.end_transform.offset.y and
-                    specs.start_transform.scale.x == specs.end_transform.scale.x and
-                    specs.start_transform.scale.y == specs.end_transform.scale.y
+            # Update the screen if the frame changed
+            if not (
+                current_animation == prev_animation and
+                current_frame_timing_data == prev_frame_timing_data
                 ):
                 self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
-                self.create_image_for_canvas(self.canvas, current_frame_timing_data.frame_num)
+                self.create_image_for_canvas(self.canvas, current_frame_timing_data.frame_num, True)
+
+            ## Update the screen if there's a transition in the frame
+            elif not (
+                specs.start_transform.rotation == specs.end_transform.rotation and
+                specs.start_transform.offset.x == specs.end_transform.offset.x and
+                specs.start_transform.offset.y == specs.end_transform.offset.y and
+                specs.start_transform.scale.x == specs.end_transform.scale.x and
+                specs.start_transform.scale.y == specs.end_transform.scale.y
+                ):
+                    self.on_frame_timing_data_select(should_stop_animation=False, should_update_data=False)
+                    self.create_image_for_canvas(self.canvas, current_frame_timing_data.frame_num, False)
+
 
             prev_animation = current_animation
             prev_frame_timing_data = current_frame_timing_data
-
-            if not self.is_running_animation:
-                continue
-
 
             self.current_animation_tick += 1
 
