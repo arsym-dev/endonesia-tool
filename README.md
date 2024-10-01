@@ -114,7 +114,7 @@ To fix this, provide a JSON file containing the widths of each character. The JS
 | Program  | Command |
 | -------- | ------- |
 | GUI      | Press `Extract > Extract Script` |
-| Terminal | <pre>python endonesia-tool.py script-extract -e /path/to/SLPM_620.47.bak -x /path/to/ELF.BIN.bak -c script_extracted.csv</pre> |
+| Terminal | <pre>python endonesia-tool.py script-extract -e /path/to/SLPM_620.47.bak -x /path/to/EXO.BIN.bak -c script_extracted.csv</pre> |
 
 If you want to overwrite the existing CSV file, use the `-r` flag.
 
