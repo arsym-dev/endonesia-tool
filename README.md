@@ -124,8 +124,8 @@ It is suggested to rename the CSV file when editing it to prevent accidentally o
 
 Open the CSV file in a text editor. The CSV has the following format:
 
-| File | ELF Pointer | EXO Block | Text addr | Item num | JP text          | EN text |
-| ---- | ----------- | --------- | --------- | -------- | ------- |
+| File | ELF Pointer | EXO Block | Text addr | Item num | JP text | EN text |
+| ---- | ----------- | --------- | --------- | -------- | ------- | --------|
 | ELF  | 003094c0    | 0         | 00348318  | 2        | 例の少年について |         |
 
 - Your final translated text must appear after the final pipe character (`|`).
